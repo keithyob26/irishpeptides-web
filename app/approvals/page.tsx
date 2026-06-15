@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 
 interface Outcome {
@@ -10,237 +11,74 @@ interface Outcome {
   content?: string
   status: string
   created_at: string
-  token?: string
-  source?: 'github' | 'notion'
-  notionBlockId?: string
-}
-
-interface NotionTask {
-  id: string
-  title: string
-  checked: boolean
-}
-
-function NotionBadge() {
-  return (
-    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6366F1]/20 text-[#A5B4FC] border border-[#6366F1]/20 ml-1.5">
-      NOTION
-    </span>
-  )
+  title?: string
+  type?: string
 }
 
 export default function ApprovalsPage() {
-  const [outcomes, setOutcomes] = useState<Outcome[]>([])
-  const [sha, setSha] = useState('')
+  const router = useRouter()
+  const [pending, setPending] = useState<Outcome[]>([])
   const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState<string | null>(null)
-  const [error, setError] = useState('')
 
-  async function load() {
-    setLoading(true)
-    setError('')
-    try {
-      const [outcomesRes, notionRes] = await Promise.allSettled([
-        fetch('/api/outcomes').then(r => r.json()),
-        fetch('/api/notion-queue').then(r => r.json()),
-      ])
-
-      const outcomesData = outcomesRes.status === 'fulfilled' ? outcomesRes.value : { outcomes: [], sha: '' }
-      const notionData = notionRes.status === 'fulfilled' ? notionRes.value : { tasks: [] }
-
-      const githubOutcomes: Outcome[] = (outcomesData.outcomes || []).map((o: Outcome) => ({
-        ...o,
-        source: 'github' as const,
-      }))
-      setSha(outcomesData.sha || '')
-
-      // Convert Notion unchecked tasks to pending outcomes
-      const notionOutcomes: Outcome[] = (notionData.tasks || [])
-        .filter((t: NotionTask) => !t.checked)
-        .map((t: NotionTask) => ({
-          id: `notion-${t.id}`,
-          agent: 'Notion Build Queue',
-          action: t.title,
-          status: 'pending_approval',
-          created_at: new Date().toISOString(),
-          source: 'notion' as const,
-          notionBlockId: t.id,
-        }))
-
-      const all = [...githubOutcomes, ...notionOutcomes].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-      setOutcomes(all)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [])
-
-  const pending = outcomes.filter(o => o.status === 'pending_approval')
-  const history = outcomes.filter(o => o.status !== 'pending_approval').slice(0, 20)
-
-  async function decide(id: string, decision: 'approve' | 'reject') {
-    setProcessing(id)
-    try {
-      const outcome = outcomes.find(o => o.id === id)
-
-      if (outcome?.source === 'notion' && outcome.notionBlockId) {
-        // Mark Notion task as checked when approved
-        if (decision === 'approve') {
-          await fetch(`/api/notion-queue`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blockId: outcome.notionBlockId, checked: true }),
-          }).catch(() => {})
-        }
-      } else {
-        // GitHub outcomes — trigger workflow if token present
-        if (outcome?.token) {
-          await fetch(`/api/approve?token=${outcome.token}&action=${decision}`).catch(() => {})
-        }
-        const updated = outcomes
-          .filter(o => o.source !== 'notion')
-          .map(o => o.id === id ? { ...o, status: decision === 'approve' ? 'approved' : 'rejected' } : o)
-        if (sha) {
-          await fetch('/api/outcomes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ outcomes: updated.map(o => { const { source, ...rest } = o; return rest }), sha }),
-          }).catch(() => {})
-        }
-      }
-
-      setOutcomes(prev => prev.map(o =>
-        o.id === id ? { ...o, status: decision === 'approve' ? 'approved' : 'rejected' } : o
-      ))
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setProcessing(null)
-    }
-  }
+  useEffect(() => {
+    fetch('/api/outcomes')
+      .then(r => r.json())
+      .then(d => {
+        const p = (d.outcomes || []).filter((o: Outcome) => o.status === 'pending_approval')
+        setPending(p)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-3xl">
       <PageHeader
         title="Approvals"
-        subtitle="Agent actions and Notion build tasks awaiting your approval"
-        badge={{ label: `${pending.length} pending`, ok: pending.length === 0 }}
+        subtitle="Content approval now handled in Content Studio"
+        badge={{ label: loading ? '…' : `${pending.length} pending`, ok: pending.length === 0 }}
       />
 
-      {error && (
-        <div className="mb-4 text-[12px] text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-lg px-4 py-3">
-          {error}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-8 text-center mb-6">
+        <div className="text-4xl mb-3">✍️</div>
+        <div className="text-[15px] font-bold text-[#F1F5F9] mb-2">Approvals moved to Content Studio</div>
+        <div className="text-[13px] text-[#64748B] mb-6 max-w-md mx-auto">
+          All content approval — inline approve/reject, image preview, Buffer/Resend/GitHub publish — now happens directly in Content Studio.
         </div>
-      )}
+        <button
+          onClick={() => router.push('/content')}
+          className="px-6 py-3 rounded-lg text-[13px] font-semibold text-[#0A0F1E] transition-opacity hover:opacity-90"
+          style={{ background: '#14B8A6' }}
+        >
+          {pending.length > 0 ? `Review ${pending.length} pending →` : 'Go to Content Studio →'}
+        </button>
+      </div>
 
-      {loading ? (
-        <div className="text-[13px] text-[#64748B]">Loading outcomes…</div>
-      ) : (
-        <>
-          {/* Pending */}
-          <div className="mb-8">
-            <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">
-              Pending Approval ({pending.length})
-            </div>
-            {pending.length === 0 ? (
-              <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 text-center">
-                <div className="text-2xl mb-2">✅</div>
-                <div className="text-[13px] text-[#64748B]">All clear — nothing pending</div>
+      {/* Quick summary */}
+      {!loading && pending.length > 0 && (
+        <div className="bg-[#1C1C1C] border border-[#F59E0B]/20 rounded-xl p-5">
+          <div className="text-[11px] font-semibold text-[#F59E0B] uppercase tracking-wide mb-3">
+            Pending Items ({pending.length})
+          </div>
+          <div className="space-y-2">
+            {pending.slice(0, 5).map(o => (
+              <div key={o.id} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 cursor-pointer"
+                onClick={() => router.push('/content')}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium text-[#F1F5F9] truncate">{o.title || o.action}</div>
+                  <div className="text-[10px] text-[#64748B]">{o.agent} · {new Date(o.created_at).toLocaleString()}</div>
+                </div>
+                <span className="text-[10px] text-[#F59E0B] ml-3 shrink-0">Review →</span>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {pending.map(o => (
-                  <div key={o.id} className={`bg-[#1C1C1C] rounded-xl p-5 border ${
-                    o.source === 'notion' ? 'border-[#6366F1]/30' : 'border-[#F59E0B]/30'
-                  }`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`text-[11px] font-bold uppercase tracking-wide ${
-                            o.source === 'notion' ? 'text-[#A5B4FC]' : 'text-[#F59E0B]'
-                          }`}>
-                            {o.agent}
-                          </span>
-                          {o.source === 'notion' && <NotionBadge />}
-                          <span className="text-[10px] text-[#475569]">
-                            {new Date(o.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-[13px] font-semibold text-[#F1F5F9] mb-2">{o.action}</div>
-                        {o.content && (
-                          <div className="text-[12px] text-[#94A3B8] bg-[#161616] rounded-lg p-3 max-h-24 overflow-y-auto">
-                            {o.content}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => decide(o.id, 'approve')}
-                          disabled={processing === o.id}
-                          className="px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/20 transition-all disabled:opacity-50"
-                        >
-                          {processing === o.id ? '…' : 'Approve'}
-                        </button>
-                        <button
-                          onClick={() => decide(o.id, 'reject')}
-                          disabled={processing === o.id}
-                          className="px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all disabled:opacity-50"
-                        >
-                          {processing === o.id ? '…' : 'Reject'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            ))}
+            {pending.length > 5 && (
+              <div className="text-[11px] text-[#64748B] pt-1">
+                +{pending.length - 5} more — <button onClick={() => router.push('/content')} className="text-[#14B8A6] hover:underline">view all in Content Studio</button>
               </div>
             )}
           </div>
-
-          {/* History */}
-          {history.length > 0 && (
-            <div>
-              <div className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-3">
-                Recent History
-              </div>
-              <div className="space-y-2">
-                {history.map(o => (
-                  <div key={o.id} className="bg-[#161616] border border-white/[0.05] rounded-lg px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-[11px] font-semibold text-[#94A3B8] shrink-0">{o.agent}</span>
-                      {o.source === 'notion' && <NotionBadge />}
-                      <span className="text-[11px] text-[#475569] mx-1">·</span>
-                      <span className="text-[12px] text-[#F1F5F9] truncate">{o.action}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-[#475569]">
-                        {new Date(o.created_at).toLocaleDateString()}
-                      </span>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        o.status === 'approved' ? 'text-[#22C55E] bg-[#22C55E]/10'
-                        : o.status === 'rejected' ? 'text-[#EF4444] bg-[#EF4444]/10'
-                        : 'text-[#F59E0B] bg-[#F59E0B]/10'
-                      }`}>
-                        {o.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
-
-      <div className="mt-6">
-        <button onClick={load} className="text-[12px] text-[#14B8A6] hover:text-[#0D9488] transition-colors">
-          ↺ Refresh
-        </button>
-      </div>
     </div>
   )
 }

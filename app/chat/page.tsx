@@ -13,11 +13,12 @@ interface Conversation {
   updated_at: string
 }
 
-type ModelKey = 'gemini' | 'deepseek' | 'claude'
+type ModelKey = 'gemini' | 'deepseek' | 'claude' | 'ollama'
 
 const MODELS: { key: ModelKey; label: string; note?: string }[] = [
   { key: 'gemini', label: 'Gemini Flash' },
   { key: 'deepseek', label: 'DeepSeek' },
+  { key: 'ollama', label: 'Gemma 4 (local)', note: 'Requires Ollama running at localhost:11434' },
   { key: 'claude', label: 'Claude', note: 'Add ANTHROPIC_API_KEY to Vercel to activate' },
 ]
 
@@ -262,7 +263,7 @@ export default function ChatPage() {
             ☰
           </button>
           <PageHeader title="AI Chat" subtitle="Streaming · live data · file uploads · conversation history"
-            badge={{ label: model === 'gemini' ? 'Gemini' : model === 'deepseek' ? 'DeepSeek' : 'Claude', ok: true }} />
+            badge={{ label: model === 'gemini' ? 'Gemini' : model === 'deepseek' ? 'DeepSeek' : model === 'ollama' ? 'Gemma 4 Local' : 'Claude', ok: true }} />
         </div>
 
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl overflow-hidden flex flex-col flex-1">
@@ -357,6 +358,11 @@ export default function ChatPage() {
               {model === 'claude' && (
                 <span className="text-[10px] text-[#F59E0B] ml-1 self-center">
                   * Add ANTHROPIC_API_KEY to Vercel to activate
+                </span>
+              )}
+              {model === 'ollama' && (
+                <span className="text-[10px] text-[#F59E0B] ml-1 self-center">
+                  * Requires Ollama running locally (ollama serve)
                 </span>
               )}
             </div>

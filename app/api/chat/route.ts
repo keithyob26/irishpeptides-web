@@ -266,7 +266,7 @@ async function streamGemini(apiKey: string, systemCtx: string, contentParts: unk
   })
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -380,6 +380,71 @@ async function streamDeepSeek(apiKey: string, systemCtx: string, message: string
       }
     }
   }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+}
+
+async function streamOllama(systemCtx: string, message: string): Promise<Response> {
+  const enc = makeEncoder()
+  try {
+    const res = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemma3',
+        prompt: `${systemCtx}\n\nUser: ${message}\nAssistant:`,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(60000),
+    })
+
+    if (!res.ok || !res.body) {
+      return new Response(new ReadableStream({
+        start(c) {
+          c.enqueue(textChunk(enc, `Ollama error: ${res.status}. Make sure Ollama is running at localhost:11434.`))
+          c.enqueue(doneChunk(enc))
+          c.close()
+        }
+      }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+
+    return new Response(new ReadableStream({
+      async start(controller) {
+        let buf = ''
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += decoder.decode(value, { stream: true })
+            const lines = buf.split('\n')
+            buf = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.trim()) continue
+              try {
+                const parsed = JSON.parse(line)
+                if (parsed.response) controller.enqueue(textChunk(enc, parsed.response))
+              } catch {}
+            }
+          }
+        } finally {
+          controller.enqueue(doneChunk(enc))
+          controller.close()
+        }
+      }
+    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+  } catch (e: unknown) {
+    const msg = (String(e).includes('ECONNREFUSED') || String(e).includes('fetch failed'))
+      ? 'Ollama is not running. Start it with: ollama serve — then try again.'
+      : `Ollama error: ${String(e)}`
+    return new Response(new ReadableStream({
+      start(c) {
+        c.enqueue(textChunk(enc, msg))
+        c.enqueue(doneChunk(enc))
+        c.close()
+      }
+    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
+  }
 }
 
 async function streamClaude(apiKey: string, systemCtx: string, contentParts: unknown[]): Promise<Response> {
@@ -534,6 +599,7 @@ export async function POST(req: NextRequest) {
   let modelRes: Response
   if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
   else if (model === 'claude') modelRes = await streamClaude(ANTHROPIC_API_KEY, systemCtx, contentParts)
+  else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
   else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
 
   return wrapWithSources(modelRes)

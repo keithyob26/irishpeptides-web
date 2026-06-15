@@ -1,204 +1,260 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 
-const PLATFORM_COLORS: Record<string, string> = {
-  Blog:       '#8B5CF6',
-  Instagram:  '#EC4899',
-  TikTok:     '#14B8A6',
-  Newsletter: '#F59E0B',
-  YouTube:    '#EF4444',
-  LinkedIn:   '#3B82F6',
+interface CalendarItem {
+  id: string
+  agent: string
+  action: string
+  type: string
+  title?: string
+  content?: string
+  status: string
+  created_at: string
+  published_at?: string
+  scheduled_date?: string
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  Blog:       '📝',
-  Instagram:  '📸',
-  TikTok:     '🎵',
-  Newsletter: '📧',
-  YouTube:    '▶️',
-  LinkedIn:   '💼',
+const TYPE_COLORS: Record<string, string> = {
+  blog:       'text-[#14B8A6]',
+  blog_post:  'text-[#14B8A6]',
+  social:     'text-[#A78BFA]',
+  instagram:  'text-[#A78BFA]',
+  tiktok:     'text-[#F472B6]',
+  newsletter: 'text-[#F59E0B]',
 }
 
-interface CalEvent {
-  date: string // YYYY-MM-DD
-  platform: string
-  title: string
-  status: 'scheduled' | 'draft' | 'published'
+const STATUS_COLORS: Record<string, string> = {
+  pending_approval: 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25',
+  approved:         'text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/25',
+  published:        'text-[#14B8A6] bg-[#14B8A6]/10 border-[#14B8A6]/25',
+  rejected:         'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25',
+  completed:        'text-[#64748B] bg-white/[0.04] border-white/[0.07]',
 }
 
-const EVENTS: CalEvent[] = [
-  { date: '2026-06-17', platform: 'Blog',       title: 'TB-500 vs BPC-157: Which Peptide Heals Faster?', status: 'scheduled' },
-  { date: '2026-06-17', platform: 'Instagram',  title: 'TB-500 reel — recovery science',                  status: 'draft' },
-  { date: '2026-06-19', platform: 'TikTok',     title: '3 peptides for joint recovery',                   status: 'scheduled' },
-  { date: '2026-06-21', platform: 'Newsletter', title: 'Week 3 — Peptide science roundup',                status: 'scheduled' },
-  { date: '2026-06-22', platform: 'Blog',       title: 'BPC-157 Ireland: Buy Guide + Dosing',             status: 'draft' },
-  { date: '2026-06-24', platform: 'Instagram',  title: 'BPC-157 infographic post',                        status: 'scheduled' },
-  { date: '2026-06-26', platform: 'TikTok',     title: 'Peptide storage — fridge vs freezer?',            status: 'scheduled' },
-  { date: '2026-06-28', platform: 'Newsletter', title: 'Week 4 — New products drop preview',              status: 'scheduled' },
-  { date: '2026-07-01', platform: 'Blog',       title: 'Sermorelin vs Ipamorelin — GH peptides compared', status: 'scheduled' },
-  { date: '2026-07-03', platform: 'YouTube',    title: 'Peptide Protocol Video — BPC-157 + TB-500',       status: 'draft' },
-]
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate()
+const STATUS_LABEL: Record<string, string> = {
+  pending_approval: 'Pending',
+  approved:         'Approved',
+  published:        'Published',
+  rejected:         'Rejected',
+  completed:        'Done',
 }
 
-function getFirstDayOfMonth(year: number, month: number) {
-  return new Date(year, month, 1).getDay()
+function detectType(o: CalendarItem): string {
+  if (o.type) return o.type
+  const action = o.action?.toLowerCase() || ''
+  const agent  = o.agent?.toLowerCase() || ''
+  if (action.includes('newsletter') || agent.includes('newsletter')) return 'newsletter'
+  if (action.includes('blog') || agent.includes('blog')) return 'blog'
+  if (action.includes('tiktok')) return 'tiktok'
+  if (action.includes('instagram') || action.includes('social') || agent.includes('social')) return 'social'
+  return 'social'
 }
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function typeLabel(t: string) {
+  if (t === 'blog_post') return 'Blog'
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+function getDate(o: CalendarItem): string {
+  return o.scheduled_date || o.created_at.split('T')[0]
+}
+
+function groupByWeek(items: CalendarItem[]): { week: string; items: CalendarItem[] }[] {
+  const grouped: Record<string, CalendarItem[]> = {}
+  for (const item of items) {
+    const d = new Date(getDate(item))
+    const day = d.getDay()
+    const monday = new Date(d)
+    monday.setDate(d.getDate() - ((day + 6) % 7))
+    const key = monday.toISOString().split('T')[0]
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(item)
+  }
+  return Object.entries(grouped)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([week, items]) => ({ week, items }))
+}
 
 export default function CalendarPage() {
-  const today = new Date()
-  const [year, setYear] = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth())
-  const [selected, setSelected] = useState<string | null>(null)
-  const [platforms, setPlatforms] = useState<string[]>([])
+  const router = useRouter()
+  const [items, setItems] = useState<CalendarItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [newTopic, setNewTopic] = useState('')
+  const [newType, setNewType] = useState('blog')
+  const [newDate, setNewDate] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState('')
 
-  const daysInMonth = getDaysInMonth(year, month)
-  const firstDay = getFirstDayOfMonth(year, month)
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/outcomes')
+      const data = await res.json()
+      const all: CalendarItem[] = (data.outcomes || []).filter(
+        (o: CalendarItem) => {
+          const t = detectType(o)
+          return ['blog', 'blog_post', 'social', 'instagram', 'tiktok', 'newsletter'].includes(t)
+        }
+      )
+      all.sort((a, b) => new Date(getDate(b)).getTime() - new Date(getDate(a)).getTime())
+      setItems(all)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const filteredEvents = EVENTS.filter(e => {
-    if (platforms.length > 0 && !platforms.includes(e.platform)) return false
-    const [ey, em] = e.date.split('-').map(Number)
-    return ey === year && em - 1 === month
-  })
+  useEffect(() => { load() }, [load])
 
-  function togglePlatform(p: string) {
-    setPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
+  async function addContent() {
+    if (!newTopic.trim()) return
+    setAdding(true)
+    try {
+      const getRes = await fetch('/api/outcomes')
+      const data = await getRes.json()
+      const newItem = {
+        id: Math.random().toString(36).slice(2, 10),
+        agent: 'manual',
+        action: newTopic,
+        title: newTopic,
+        type: newType,
+        content: '',
+        status: 'pending_approval',
+        created_at: new Date().toISOString(),
+        scheduled_date: newDate || new Date().toISOString().split('T')[0],
+      }
+      const updated = [newItem, ...(data.outcomes || [])]
+      await fetch('/api/outcomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcomes: updated, sha: data.sha }),
+      })
+      setNewTopic('')
+      setNewType('blog')
+      setNewDate('')
+      setShowAdd(false)
+      await load()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setAdding(false)
+    }
   }
 
-  function prevMonth() {
-    if (month === 0) { setYear(y => y - 1); setMonth(11) }
-    else setMonth(m => m - 1)
-  }
-  function nextMonth() {
-    if (month === 11) { setYear(y => y + 1); setMonth(0) }
-    else setMonth(m => m + 1)
-  }
-
-  const selectedEvents = selected ? EVENTS.filter(e => e.date === selected) : []
+  const pendingCount = items.filter(o => o.status === 'pending_approval').length
+  const weeks = groupByWeek(items)
 
   return (
     <div className="p-8 max-w-5xl">
       <PageHeader
-        title="📅 Content Calendar"
-        subtitle="Scheduled content across all platforms"
-        badge={{ label: `${EVENTS.length} planned`, ok: true }}
+        title="Content Calendar"
+        subtitle="Live — synced from Content Studio · agent-generated"
+        badge={{ label: loading ? 'Loading…' : `${items.length} items`, ok: true }}
       />
 
-      {/* Platform filters */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {Object.keys(PLATFORM_COLORS).map(p => (
-          <button
-            key={p}
-            onClick={() => togglePlatform(p)}
-            className="text-[11px] px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5"
-            style={{
-              borderColor: platforms.includes(p) ? PLATFORM_COLORS[p] + '80' : 'rgba(255,255,255,0.07)',
-              background: platforms.includes(p) ? PLATFORM_COLORS[p] + '15' : 'transparent',
-              color: platforms.includes(p) ? PLATFORM_COLORS[p] : '#94A3B8',
-            }}
-          >
-            <span>{PLATFORM_ICONS[p]}</span>
-            <span>{p}</span>
+      {error && (
+        <div className="mb-4 text-[12px] text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-lg px-4 py-3">{error}</div>
+      )}
+
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        {pendingCount > 0 && (
+          <button onClick={() => router.push('/content')}
+            className="text-[12px] px-4 py-2 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#F59E0B]/20 transition-all">
+            {pendingCount} pending — Review in Content Studio →
           </button>
-        ))}
+        )}
+        <button onClick={() => setShowAdd(o => !o)}
+          className="text-[12px] px-4 py-2 rounded-lg bg-[#14B8A6]/10 border border-[#14B8A6]/30 text-[#14B8A6] hover:bg-[#14B8A6]/20 transition-all">
+          + Add Content
+        </button>
+        <button onClick={load} className="ml-auto text-[11px] text-[#475569] hover:text-[#14B8A6] transition-colors">↺ Refresh</button>
       </div>
 
-      {/* Month navigation */}
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="text-[#94A3B8] hover:text-[#F1F5F9] text-lg px-2">←</button>
-        <div className="text-[15px] font-bold text-[#F1F5F9]">{MONTH_NAMES[month]} {year}</div>
-        <button onClick={nextMonth} className="text-[#94A3B8] hover:text-[#F1F5F9] text-lg px-2">→</button>
-      </div>
-
-      {/* Calendar grid */}
-      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl overflow-hidden mb-6">
-        {/* Day headers */}
-        <div className="grid grid-cols-7 border-b border-white/[0.07]">
-          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
-            <div key={d} className="text-center text-[10px] font-semibold text-[#475569] py-2 uppercase tracking-wide">
-              {d}
-            </div>
-          ))}
+      {showAdd && (
+        <div className="bg-[#1C1C1C] border border-[#14B8A6]/20 rounded-xl p-5 mb-6">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">Add Content</div>
+          <div className="flex gap-3 flex-wrap">
+            <input
+              type="text"
+              value={newTopic}
+              onChange={e => setNewTopic(e.target.value)}
+              placeholder="Topic or title…"
+              className="flex-1 min-w-[200px] bg-[#161616] border border-white/[0.07] rounded-lg px-4 py-2.5 text-[13px] text-[#F1F5F9] placeholder-[#475569] outline-none focus:border-[#14B8A6]/50"
+            />
+            <select value={newType} onChange={e => setNewType(e.target.value)}
+              className="bg-[#161616] border border-white/[0.07] rounded-lg px-3 py-2.5 text-[12px] text-[#F1F5F9] outline-none focus:border-[#14B8A6]/50">
+              <option value="blog">Blog</option>
+              <option value="social">Social</option>
+              <option value="newsletter">Newsletter</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+            <input
+              type="date"
+              value={newDate}
+              onChange={e => setNewDate(e.target.value)}
+              className="bg-[#161616] border border-white/[0.07] rounded-lg px-3 py-2.5 text-[12px] text-[#F1F5F9] outline-none focus:border-[#14B8A6]/50"
+            />
+            <button onClick={addContent} disabled={adding || !newTopic.trim()}
+              className="px-5 py-2.5 rounded-lg text-[12px] font-semibold text-[#0A0F1E] disabled:opacity-40 transition-opacity"
+              style={{ background: '#14B8A6' }}>
+              {adding ? '…' : 'Add'}
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* Days grid */}
-        <div className="grid grid-cols-7">
-          {Array.from({ length: firstDay }).map((_, i) => (
-            <div key={`empty-${i}`} className="min-h-[80px] border-b border-r border-white/[0.04]" />
-          ))}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-            const dayEvents = filteredEvents.filter(e => e.date === dateStr)
-            const isToday = dateStr === today.toISOString().split('T')[0]
-            const isSelected = dateStr === selected
-
+      {loading ? (
+        <div className="text-[13px] text-[#64748B]">Loading calendar…</div>
+      ) : items.length === 0 ? (
+        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-8 text-center">
+          <div className="text-3xl mb-3">📅</div>
+          <div className="text-[14px] font-semibold text-[#F1F5F9] mb-1">Calendar is empty</div>
+          <div className="text-[12px] text-[#64748B] mb-4">Agents populate this when content is generated. Add items manually or run content_engine.py.</div>
+          <button onClick={() => setShowAdd(true)}
+            className="text-[12px] px-4 py-2 rounded-lg bg-[#14B8A6]/10 border border-[#14B8A6]/30 text-[#14B8A6] hover:bg-[#14B8A6]/20 transition-all">
+            + Add Content
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {weeks.map(({ week, items: weekItems }) => {
+            const weekEnd = new Date(week)
+            weekEnd.setDate(weekEnd.getDate() + 6)
+            const label = `Week of ${new Date(week).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' })}`
             return (
-              <div
-                key={day}
-                onClick={() => setSelected(isSelected ? null : dateStr)}
-                className={`min-h-[80px] border-b border-r border-white/[0.04] p-1.5 cursor-pointer transition-all ${
-                  isSelected ? 'bg-[#14B8A6]/10' : 'hover:bg-white/[0.02]'
-                }`}
-              >
-                <div className={`text-[11px] font-semibold mb-1 w-5 h-5 flex items-center justify-center rounded-full ${
-                  isToday ? 'bg-[#14B8A6] text-[#0A0F1E]' : 'text-[#64748B]'
-                }`}>
-                  {day}
-                </div>
-                <div className="space-y-0.5">
-                  {dayEvents.slice(0, 3).map((e, ei) => (
-                    <div
-                      key={ei}
-                      className="text-[9px] rounded px-1 py-0.5 truncate"
-                      style={{ background: PLATFORM_COLORS[e.platform] + '25', color: PLATFORM_COLORS[e.platform] }}
-                    >
-                      {PLATFORM_ICONS[e.platform]} {e.title}
-                    </div>
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <div className="text-[9px] text-[#475569]">+{dayEvents.length - 3} more</div>
-                  )}
+              <div key={week}>
+                <div className="text-[11px] font-semibold text-[#475569] uppercase tracking-wide mb-2">{label}</div>
+                <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl overflow-hidden">
+                  {weekItems.map((o) => {
+                    const type = detectType(o)
+                    const isPending = o.status === 'pending_approval'
+                    return (
+                      <div key={o.id}
+                        className={`flex items-center gap-4 px-5 py-3.5 border-b border-white/[0.04] last:border-0 transition-colors ${isPending ? 'hover:bg-[#F59E0B]/[0.03] cursor-pointer' : 'hover:bg-white/[0.02]'}`}
+                        onClick={isPending ? () => router.push('/content') : undefined}
+                      >
+                        <span className="text-[12px] text-[#64748B] font-mono w-20 shrink-0">{getDate(o)}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wide w-16 shrink-0 ${TYPE_COLORS[type] || 'text-[#64748B]'}`}>
+                          {typeLabel(type)}
+                        </span>
+                        <span className="text-[13px] text-[#94A3B8] flex-1 truncate">{o.title || o.action}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${STATUS_COLORS[o.status] || STATUS_COLORS.completed}`}>
+                          {STATUS_LABEL[o.status] || o.status}
+                        </span>
+                        {isPending && <span className="text-[10px] text-[#F59E0B] shrink-0">Review →</span>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
           })}
-        </div>
-      </div>
-
-      {/* Selected day detail */}
-      {selected && selectedEvents.length > 0 && (
-        <div className="bg-[#1C1C1C] border border-[#14B8A6]/25 rounded-xl p-5">
-          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">
-            {selected}
-          </div>
-          <div className="space-y-3">
-            {selectedEvents.map((e, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span
-                  className="text-[10px] font-bold px-2 py-1 rounded-lg shrink-0"
-                  style={{ background: PLATFORM_COLORS[e.platform] + '20', color: PLATFORM_COLORS[e.platform] }}
-                >
-                  {PLATFORM_ICONS[e.platform]} {e.platform}
-                </span>
-                <div>
-                  <div className="text-[13px] text-[#F1F5F9]">{e.title}</div>
-                  <div className={`text-[10px] mt-0.5 ${
-                    e.status === 'published' ? 'text-[#22C55E]' :
-                    e.status === 'scheduled' ? 'text-[#14B8A6]' : 'text-[#F59E0B]'
-                  }`}>
-                    {e.status}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>

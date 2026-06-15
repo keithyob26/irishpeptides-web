@@ -70,9 +70,38 @@ async function fetchWorkflowSchedules(): Promise<Record<string, string>> {
 
 async function fetchSkillsMd(): Promise<string> {
   try {
-    const r = await fetch(`${RAW}/skills/SKILLS.md`, { signal: AbortSignal.timeout(5000) })
-    return r.ok ? r.text() : ''
-  } catch { return '' }
+    // Fetch the directory listing first
+    const listRes = await fetch(`https://api.github.com/repos/${REPO}/contents/skills`, {
+      headers: headers(),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!listRes.ok) {
+      // Fall back to just SKILLS.md
+      const r = await fetch(`${RAW}/skills/SKILLS.md`, { signal: AbortSignal.timeout(5000) })
+      return r.ok ? r.text() : ''
+    }
+    const files: { name: string; type: string }[] = await listRes.json()
+    const mdFiles = files.filter(f => f.type === 'file' && f.name.endsWith('.md'))
+
+    // Fetch all .md files in parallel
+    const contents = await Promise.allSettled(
+      mdFiles.map(f => fetch(`${RAW}/skills/${f.name}`, { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.text() : ''))
+    )
+
+    return contents
+      .filter(r => r.status === 'fulfilled')
+      .map((r, i) => {
+        const text = (r as PromiseFulfilledResult<string>).value
+        // Prefix non-SKILLS.md files with a section header
+        if (mdFiles[i].name !== 'SKILLS.md') {
+          return `\n## ${mdFiles[i].name.replace('.md', '').replace(/-/g, ' ')}\n${text}`
+        }
+        return text
+      })
+      .join('\n\n')
+  } catch {
+    return ''
+  }
 }
 
 function parseSkillsTable(md: string): { name: string; trigger: string; description: string; section: string }[] {
@@ -85,7 +114,7 @@ function parseSkillsTable(md: string): { name: string; trigger: string; descript
       continue
     }
     // Table row: | Skill Name | `@trigger` | Description |
-    if (line.startsWith('|') && !line.includes('---') && !line.toLowerCase().includes('skill') && !line.toLowerCase().includes('trigger')) {
+    if (line.startsWith('|') && !line.includes('---')) {
       const cells = line.split('|').map(c => c.trim()).filter(Boolean)
       if (cells.length >= 3) {
         const name = cells[0]
@@ -99,6 +128,15 @@ function parseSkillsTable(md: string): { name: string; trigger: string; descript
   }
 
   return skills
+}
+
+// Map of skill trigger keywords to agent files that use them
+const SKILL_AGENT_MAP: Record<string, string[]> = {
+  'last30days': ['content_engine.py', 'seo_agent.py', 'competitor_monitor.py'],
+  'irishpeptides': ['content_engine.py', 'newsletter_agent.py', 'social_agent.py'],
+  'legal': ['content_engine.py', 'newsletter_agent.py'],
+  'protocol': ['content_engine.py'],
+  'context': ['content_engine.py', 'newsletter_agent.py', 'competitor_monitor.py', 'affiliate_monitor.py'],
 }
 
 export async function GET() {
@@ -147,12 +185,16 @@ export async function GET() {
     })
 
     const skills = parseSkillsTable(skillsMd)
+    const skillsWithAgents = skills.map(s => ({
+      ...s,
+      usedBy: SKILL_AGENT_MAP[s.trigger.toLowerCase().replace('@', '')] || [],
+    }))
 
     return NextResponse.json({
       workflows: workflowsWithRuns,
-      skills,
+      skills: skillsWithAgents,
       totalWorkflows: workflowsWithRuns.length,
-      totalSkills: skills.length,
+      totalSkills: skillsWithAgents.length,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
