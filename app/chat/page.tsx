@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import PageHeader from '@/components/PageHeader'
 
-interface Msg { role: 'user' | 'assistant'; content: string; sources?: string[] }
+interface Msg { role: 'user' | 'assistant'; content: string; sources?: string[]; model?: string }
 
 interface Conversation {
   id: string
@@ -16,22 +16,22 @@ interface Conversation {
 type ModelKey = 'gemini' | 'deepseek' | 'claude' | 'ollama'
 
 const MODELS: { key: ModelKey; label: string; note?: string }[] = [
+  { key: 'claude', label: 'Claude' },
   { key: 'gemini', label: 'Gemini Flash' },
   { key: 'deepseek', label: 'DeepSeek' },
   { key: 'ollama', label: 'Gemma 4 (local)', note: 'Requires Ollama running at localhost:11434' },
-  { key: 'claude', label: 'Claude', note: 'Add ANTHROPIC_API_KEY to Vercel to activate' },
 ]
 
 const STARTERS = [
   'How many visitors did the site get this month?',
+  'What are my top ranking keywords?',
   'How are my agents doing?',
-  'How many subscribers do I have?',
-  'What should I post about this week?',
+  'Write a blog post about BPC-157 benefits',
 ]
 
 const INITIAL_MSG: Msg = {
   role: 'assistant',
-  content: "Good morning. I'm your Irish Peptides AI assistant. Ask me about site traffic, subscribers, content ideas, revenue, or anything about the business. I'll pull in live data automatically.",
+  content: "Good morning. I'm your Irish Peptides AI assistant. Ask me about site traffic, organic search rankings, subscribers, content ideas, revenue — I pull live data automatically. Say 'write a blog post about X' and I'll trigger the Content Engine agent.",
 }
 
 function groupConversations(convs: Conversation[]) {
@@ -55,11 +55,16 @@ function groupConversations(convs: Conversation[]) {
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
-function SourceBadge({ sources }: { sources: string[] }) {
-  if (!sources.length) return null
+function SourceBadge({ sources, model }: { sources: string[]; model?: string }) {
+  if (!sources.length && !model) return null
   return (
     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-      <span className="text-[9px] text-[#475569] uppercase tracking-wide">Live data:</span>
+      {model && (
+        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20 font-medium capitalize">
+          {model}
+        </span>
+      )}
+      {sources.length > 0 && <span className="text-[9px] text-[#475569] uppercase tracking-wide">Live data:</span>}
       {sources.map(s => (
         <span key={s} className="text-[9px] px-1.5 py-0.5 rounded bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/20 font-medium">
           {s}
@@ -78,7 +83,7 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState('')
   const [streamingSources, setStreamingSources] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
-  const [model, setModel] = useState<ModelKey>('gemini')
+  const [model, setModel] = useState<ModelKey>('claude')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -196,6 +201,7 @@ export default function ChatPage() {
         role: 'assistant',
         content: accumulated || 'No response.',
         sources: detectedSources.length > 0 ? detectedSources : undefined,
+        model,
       }]
       setMsgs(finalMsgs)
       setStreaming('')
@@ -280,7 +286,7 @@ export default function ChatPage() {
                 }`}>
                   {m.role === 'assistant' && <div className="text-[11px] text-[#14B8A6] font-semibold mb-1">Jarvis</div>}
                   <p className="text-[13px] text-[#E2E8F0] leading-relaxed whitespace-pre-wrap">{m.content}</p>
-                  {m.role === 'assistant' && m.sources && <SourceBadge sources={m.sources} />}
+                  {m.role === 'assistant' && <SourceBadge sources={m.sources || []} model={m.model} />}
                 </div>
               </div>
             ))}
