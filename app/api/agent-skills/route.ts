@@ -1,14 +1,27 @@
 import { NextResponse } from 'next/server'
 
+export const runtime = 'nodejs'
+
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ''
 const REPO = 'keithyob26/irishpeptides-jarvis'
-const RAW = 'https://raw.githubusercontent.com/keithyob26/irishpeptides-jarvis/master'
 
 const headers = () => ({
   Authorization: `Bearer ${GITHUB_TOKEN}`,
   Accept: 'application/vnd.github+json',
   'X-GitHub-Api-Version': '2022-11-28',
 })
+
+async function fetchGitHubFile(path: string): Promise<string> {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
+      headers: headers(),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!r.ok) return ''
+    const data: { content: string } = await r.json()
+    return Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf-8')
+  } catch { return '' }
+}
 
 // Cron expression to human-readable schedule
 function parseCron(cron: string): string {
@@ -32,7 +45,6 @@ function parseCron(cron: string): string {
 
 async function fetchWorkflowSchedules(): Promise<Record<string, string>> {
   const schedules: Record<string, string> = {}
-  // Fetch known workflow files to extract cron schedules
   const WORKFLOW_FILES = [
     'content-engine.yml', 'ga4-monitor.yml', 'newsletter-agent.yml',
     'competitor-monitor.yml', 'affiliate-monitor.yml', 'site-qa.yml',
@@ -45,12 +57,8 @@ async function fetchWorkflowSchedules(): Promise<Record<string, string>> {
 
   await Promise.allSettled(WORKFLOW_FILES.map(async f => {
     try {
-      const r = await fetch(`${RAW}/.github/workflows/${f}`, {
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!r.ok) return
-      const text = await r.text()
-      // Extract cron lines
+      const text = await fetchGitHubFile(`.github/workflows/${f}`)
+      if (!text) return
       const cronMatches = text.matchAll(/cron:\s*['"]?([^'"#\n]+)['"]?/g)
       const cronsFound: string[] = []
       for (const match of cronMatches) {
@@ -70,29 +78,24 @@ async function fetchWorkflowSchedules(): Promise<Record<string, string>> {
 
 async function fetchSkillsMd(): Promise<string> {
   try {
-    // Fetch the directory listing first
     const listRes = await fetch(`https://api.github.com/repos/${REPO}/contents/skills`, {
       headers: headers(),
       signal: AbortSignal.timeout(6000),
     })
     if (!listRes.ok) {
-      // Fall back to just SKILLS.md
-      const r = await fetch(`${RAW}/skills/SKILLS.md`, { signal: AbortSignal.timeout(5000) })
-      return r.ok ? r.text() : ''
+      return await fetchGitHubFile('skills/SKILLS.md')
     }
     const files: { name: string; type: string }[] = await listRes.json()
     const mdFiles = files.filter(f => f.type === 'file' && f.name.endsWith('.md'))
 
-    // Fetch all .md files in parallel
     const contents = await Promise.allSettled(
-      mdFiles.map(f => fetch(`${RAW}/skills/${f.name}`, { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.text() : ''))
+      mdFiles.map(f => fetchGitHubFile(`skills/${f.name}`))
     )
 
     return contents
       .filter(r => r.status === 'fulfilled')
       .map((r, i) => {
         const text = (r as PromiseFulfilledResult<string>).value
-        // Prefix non-SKILLS.md files with a section header
         if (mdFiles[i].name !== 'SKILLS.md') {
           return `\n## ${mdFiles[i].name.replace('.md', '').replace(/-/g, ' ')}\n${text}`
         }

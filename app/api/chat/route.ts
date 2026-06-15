@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { spawnSync } from 'child_process'
+
+export const runtime = 'nodejs'
+
+const CLAUDE_CMD = 'C:\\Users\\keith.obeirne\\AppData\\Roaming\\npm\\claude.cmd'
 
 const BRAND_CTX = `You are Jarvis, the AI assistant for Irish Peptides & Nutrition — an Irish sports nutrition and peptide education brand by Keith O'Beirne. Answer like a smart, friendly colleague who knows the business inside out. Use short conversational sentences. Never use bullet points or headers in chat responses. If you have live data, weave it in naturally. Always add context and a suggestion after data. For educational and research purposes only — never give medical advice.`
 
@@ -266,7 +271,7 @@ async function streamGemini(apiKey: string, systemCtx: string, contentParts: unk
   })
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -447,78 +452,46 @@ async function streamOllama(systemCtx: string, message: string): Promise<Respons
   }
 }
 
-async function streamClaude(apiKey: string, systemCtx: string, contentParts: unknown[]): Promise<Response> {
-  if (!apiKey) {
-    const enc = makeEncoder()
-    return new Response(new ReadableStream({
-      start(c) {
-        c.enqueue(textChunk(enc, 'Claude requires ANTHROPIC_API_KEY. Add it to Vercel environment variables to activate.'))
-        c.enqueue(doneChunk(enc))
-        c.close()
-      }
-    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: systemCtx,
-      messages: [{ role: 'user', content: contentParts }],
-      stream: true,
-    }),
-    signal: AbortSignal.timeout(30000),
-  })
-
-  if (!res.ok || !res.body) {
-    const err = await res.text()
-    const enc = makeEncoder()
-    return new Response(new ReadableStream({
-      start(c) {
-        c.enqueue(textChunk(enc, `Claude error: ${res.status} — ${err.slice(0, 200)}`))
-        c.enqueue(doneChunk(enc))
-        c.close()
-      }
-    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
-  }
-
+async function streamClaude(systemCtx: string, contentParts: unknown[]): Promise<Response> {
   const enc = makeEncoder()
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
+  try {
+    const textParts = contentParts.filter(p => (p as Record<string, unknown>).type === 'text')
+    const lastText = textParts[textParts.length - 1] as Record<string, unknown>
+    const message = (lastText?.text as string) || ''
+    const fullPrompt = `${systemCtx}\n\nUser: ${message}\nAssistant:`
 
-  return new Response(new ReadableStream({
-    async start(controller) {
-      let buf = ''
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += decoder.decode(value, { stream: true })
-          const lines = buf.split('\n')
-          buf = lines.pop() ?? ''
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            const raw = line.slice(6).trim()
-            try {
-              const parsed = JSON.parse(raw)
-              if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
-                controller.enqueue(textChunk(enc, parsed.delta.text))
-              }
-            } catch {}
-          }
-        }
-      } finally {
-        controller.enqueue(doneChunk(enc))
-        controller.close()
-      }
+    const result = spawnSync(
+      CLAUDE_CMD,
+      ['--dangerously-skip-permissions', '-p', fullPrompt.slice(0, 50000)],
+      { encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024 }
+    )
+
+    if (result.error) {
+      const msg = String(result.error).includes('ENOENT')
+        ? 'Claude CLI not available in this environment. Run locally or set CLAUDE_CLI_PATH.'
+        : `Claude CLI error: ${String(result.error).slice(0, 200)}`
+      return new Response(new ReadableStream({
+        start(c) { c.enqueue(textChunk(enc, msg)); c.enqueue(doneChunk(enc)); c.close() }
+      }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
     }
-  }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+
+    if (result.status !== 0) {
+      const errMsg = result.stderr?.slice(0, 300) || `Claude CLI exited with code ${result.status}`
+      return new Response(new ReadableStream({
+        start(c) { c.enqueue(textChunk(enc, `Claude error: ${errMsg}`)); c.enqueue(doneChunk(enc)); c.close() }
+      }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
+    }
+
+    const responseText = result.stdout?.trim() || 'No response from Claude.'
+    return new Response(new ReadableStream({
+      start(c) { c.enqueue(textChunk(enc, responseText)); c.enqueue(doneChunk(enc)); c.close() }
+    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+  } catch (e: unknown) {
+    const msg = `Claude CLI exception: ${String(e).slice(0, 200)}`
+    return new Response(new ReadableStream({
+      start(c) { c.enqueue(textChunk(enc, msg)); c.enqueue(doneChunk(enc)); c.close() }
+    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
+  }
 }
 
 // ── POST handler ──────────────────────────────────────────────────────────────
@@ -526,10 +499,9 @@ async function streamClaude(apiKey: string, systemCtx: string, contentParts: unk
 export async function POST(req: NextRequest) {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
 
   let message = ''
-  let model = 'gemini'
+  let model = 'claude'
   const contentParts: unknown[] = []
 
   const contentType = req.headers.get('content-type') || ''
@@ -537,7 +509,7 @@ export async function POST(req: NextRequest) {
   if (contentType.includes('multipart/form-data')) {
     const form = await req.formData()
     message = (form.get('message') as string) || ''
-    model = (form.get('model') as string) || 'gemini'
+    model = (form.get('model') as string) || 'claude'
     const files = form.getAll('file') as File[]
     for (const file of files) {
       const bytes = await file.arrayBuffer()
@@ -551,7 +523,7 @@ export async function POST(req: NextRequest) {
   } else {
     const body = await req.json() as { message?: string; model?: string }
     message = body.message || ''
-    model = body.model || 'gemini'
+    model = body.model || 'claude'
   }
 
   if (!message?.trim() && contentParts.length === 0) {
@@ -598,7 +570,7 @@ export async function POST(req: NextRequest) {
 
   let modelRes: Response
   if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
-  else if (model === 'claude') modelRes = await streamClaude(ANTHROPIC_API_KEY, systemCtx, contentParts)
+  else if (model === 'claude') modelRes = await streamClaude(systemCtx, contentParts)
   else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
   else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
 
