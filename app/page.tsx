@@ -1,11 +1,7 @@
-import PageHeader from "@/components/PageHeader";
+"use client";
 
-const KPIS = [
-  { label: "Site Status",       value: "—",  sub: "Connect irishpeptides.ie" },
-  { label: "GA4 Users (7d)",    value: "—",  sub: "Add GA4 service account"  },
-  { label: "Newsletter Subs",   value: "—",  sub: "Add RESEND_API_KEY"        },
-  { label: "Stripe Revenue",    value: "—",  sub: "Add STRIPE_API_KEY"        },
-];
+import { useState, useEffect } from "react";
+import PageHeader from "@/components/PageHeader";
 
 const AGENTS = [
   { name: "Content Engine",   schedule: "Tue/Thu/Sat 7am" },
@@ -16,22 +12,53 @@ const AGENTS = [
   { name: "Site Optimiser",   schedule: "Sunday 9am"      },
 ];
 
-async function getSessionStatus() {
-  try {
-    const res = await fetch(
-      'https://raw.githubusercontent.com/keithyob26/irishpeptides-jarvis/master/memory/resume_agent_results.json',
-      { next: { revalidate: 3600 } }
-    );
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
+export default function HomePage() {
+  const [subscribers, setSubscribers] = useState<string>("--");
+  const [lastRun, setLastRun] = useState<string>("--");
+  const [interrupted, setInterrupted] = useState<Array<{ title: string; age_minutes: number }>>([]);
 
-export default async function HomePage() {
-  const sessionStatus = await getSessionStatus();
-  const interrupted: Array<{ title: string; age_minutes: number }> = sessionStatus?.interrupted ?? [];
+  useEffect(() => {
+    // Fetch live subscriber count from Resend
+    fetch("/api/subscribers")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data && typeof data.count === "number") {
+          setSubscribers(String(data.count));
+        }
+      })
+      .catch(() => {});
+
+    // Fetch most recent agent outcome timestamp
+    fetch("/api/outcomes")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const outcomes = Array.isArray(data) ? data : (data?.outcomes ?? []);
+        if (outcomes.length > 0) {
+          const latest = outcomes[0];
+          const ts = latest.created_at ?? latest.timestamp ?? null;
+          if (ts) {
+            const d = new Date(ts);
+            setLastRun(d.toLocaleString("en-IE", { dateStyle: "short", timeStyle: "short" }));
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Fetch interrupted sessions
+    fetch("https://raw.githubusercontent.com/keithyob26/irishpeptides-jarvis/master/memory/resume_agent_results.json")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.interrupted) setInterrupted(data.interrupted);
+      })
+      .catch(() => {});
+  }, []);
+
+  const KPIS = [
+    { label: "Site Status",       value: "—",          sub: "Connect irishpeptides.ie" },
+    { label: "GA4 Users (7d)",    value: "—",          sub: "Add GA4 service account"  },
+    { label: "Newsletter Subs",   value: subscribers,  sub: "Live via Resend"          },
+    { label: "Stripe Revenue",    value: "—",          sub: "Add STRIPE_API_KEY"        },
+  ];
 
   return (
     <div className="p-8 max-w-5xl">
@@ -80,7 +107,8 @@ export default async function HomePage() {
           <p>📊 GA4: <span className="text-[#F59E0B]">not connected</span> — add GA4_SERVICE_ACCOUNT_JSON</p>
           <p>📅 Next: <span className="text-[#F1F5F9]">2026-06-17 · Blog — TB-500 vs BPC-157</span></p>
           <p>🤖 Agents: <span className="text-[#22C55E]">6 scheduled via GitHub Actions</span></p>
-          <p>📬 Newsletter: <span className="text-[#F1F5F9]">2 subscribers</span> · Resend connected</p>
+          <p>📬 Newsletter: <span className="text-[#F1F5F9]">{subscribers} subscribers</span> · Resend connected</p>
+          <p>🕒 Last agent run: <span className="text-[#F1F5F9]">{lastRun}</span></p>
         </div>
       </div>
 
