@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as crypto from 'crypto'
 
-const PROPERTY_ID = process.env.GA4_PROPERTY_ID || 'properties/453318049'
+const PROPERTY_ID = process.env.GA4_PROPERTY_ID || 'properties/539754026'
 
 async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
   const sa = JSON.parse(serviceAccountJson)
