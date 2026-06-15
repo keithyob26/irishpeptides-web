@@ -26,6 +26,9 @@ function detectIntents(message: string): Set<string> {
   if (/site.*health|health.*site|qa|broken.*link|error.*site|site.*down|page.*load/.test(q)) intents.add('sitehealth')
   if (/competitor|competition|rival|market|what.*others|who.*selling/.test(q)) intents.add('competitor')
   if (/revenue|money|stripe|income|earn|sale|payment|how much.*made|profit/.test(q)) intents.add('revenue')
+  if (/rank|keyword|search console|gsc|position|impression|seo|organic.*search|search.*traffic/.test(q)) intents.add('searchconsole')
+  if (/write.*blog|create.*post|publish.*blog|generate.*content|create.*article|draft.*post/.test(q)) intents.add('triggerContent')
+  if (/run.*agent|trigger.*agent|start.*agent|dispatch.*workflow|run.*seo|run.*competitor/.test(q)) intents.add('triggerAgent')
 
   // General catch-all — inject summary context
   if (intents.size === 0 || /everything|overview|summary|update|brief|morning|how.*going|catch me up/.test(q)) {
@@ -36,6 +39,56 @@ function detectIntents(message: string): Set<string> {
 }
 
 // ── Data fetchers ────────────────────────────────────────────────────────────
+
+async function fetchSearchConsoleSummary(saJson: string): Promise<string> {
+  try {
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
+    const r = await fetch(`${baseUrl}/api/search-console?days=28`, { signal: AbortSignal.timeout(12000) })
+    if (!r.ok) return ''
+    const d = await r.json()
+    if (!d.connected || !d.summary) return ''
+    const s = d.summary
+    const top5 = (d.keywords || []).slice(0, 5).map((k: { query: string; position: number }) => `"${k.query}" (pos ${k.position})`).join(', ')
+    return `Search Console last 28 days: ${s.totalClicks} clicks, ${s.totalImpressions} impressions, avg position ${s.avgPosition}, avg CTR ${s.avgCtr}%. Top keywords: ${top5 || 'none yet'}.`
+  } catch { return '' }
+}
+
+async function dispatchWorkflow(githubToken: string, workflow: string, inputs: Record<string, string> = {}): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/keithyob26/irishpeptides-jarvis/actions/workflows/${workflow}/dispatches`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${githubToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'master', inputs }),
+      signal: AbortSignal.timeout(10000),
+    })
+    return res.ok || res.status === 204
+      ? { ok: true, message: `Triggered ${workflow} — check GitHub Actions` }
+      : { ok: false, message: `GitHub ${res.status}: ${await res.text().then(t => t.slice(0, 100))}` }
+  } catch (e) { return { ok: false, message: String(e) } }
+}
+
+async function addNotionTask(notionKey: string, title: string, details: string): Promise<{ ok: boolean; url?: string }> {
+  try {
+    const res = await fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${notionKey}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parent: { database_id: '37da0eb7-e3ea-819e-af5b-e76db92a7c8c' },
+        properties: {
+          Name: { title: [{ text: { content: title.slice(0, 100) } }] },
+          Done: { checkbox: false },
+          Notes: { rich_text: [{ text: { content: details.slice(0, 1000) } }] },
+        },
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return { ok: false }
+    const d = await res.json()
+    return { ok: true, url: d.url }
+  } catch { return { ok: false } }
+}
 
 async function fetchResendSubscribers(key: string): Promise<{ count: number; label: string }> {
   try {
@@ -177,6 +230,7 @@ async function buildLiveContext(message: string): Promise<{ context: string; sou
   const RESEND_KEY = process.env.RESEND_API_KEY || ''
   const NOTION_KEY = process.env.NOTION_API_KEY || ''
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ''
+  const SA_JSON = process.env.GA4_SERVICE_ACCOUNT_JSON || ''
 
   // Fetch outcomes.json once — many intents use it
   const needsOutcomes = intents.has('social') || intents.has('sitehealth') || intents.has('competitor') || intents.has('calendar') || intents.has('revenue') || intents.has('summary')
@@ -231,6 +285,12 @@ async function buildLiveContext(message: string): Promise<{ context: string; sou
 
   if (intents.has('revenue')) {
     if (summaries) { lines.push(summaries.revenue); if (!sources.includes('Outcomes')) sources.push('Outcomes') }
+  }
+
+  if ((intents.has('searchconsole') || intents.has('summary')) && SA_JSON) {
+    tasks.push(fetchSearchConsoleSummary(SA_JSON).then(s => {
+      if (s) { lines.push(s); sources.push('Search Console') }
+    }))
   }
 
   await Promise.allSettled(tasks)
@@ -533,7 +593,32 @@ export async function POST(req: NextRequest) {
 
   // Build live context based on intent detection
   const { context: liveContext, sources } = await buildLiveContext(message)
-  const systemCtx = BRAND_CTX + liveContext
+
+  // Detect agent dispatch intents and take action
+  const intents = detectIntents(message)
+  const GH_TOKEN = process.env.GITHUB_TOKEN || ''
+  const NTN_KEY = process.env.NOTION_API_KEY || ''
+  let agentActionNote = ''
+
+  if (intents.has('triggerContent') && GH_TOKEN) {
+    const topic = message.replace(/write|create|generate|publish|draft|blog|post|about|a|an/gi, '').trim().slice(0, 100)
+    const notionResult = NTN_KEY ? await addNotionTask(NTN_KEY, `Content request: ${topic}`, `Requested via AI Chat on ${new Date().toUTCString()}. Auto-triggered content-engine.yml.`) : { ok: false }
+    const dispatchResult = await dispatchWorkflow(GH_TOKEN, 'content-engine.yml')
+    agentActionNote = `\n\n[ACTION TAKEN] Triggered Content Engine agent for "${topic}".${notionResult.ok ? ' Added to Notion Build Queue.' : ''} ${dispatchResult.message}.`
+    if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
+    if (notionResult.ok && !sources.includes('Notion')) sources.push('Notion')
+  } else if (intents.has('triggerAgent') && GH_TOKEN) {
+    const q = message.toLowerCase()
+    let workflow = 'system-health.yml'
+    if (q.includes('seo')) workflow = 'seo-loop.yml'
+    else if (q.includes('competitor')) workflow = 'competitor-monitor.yml'
+    else if (q.includes('content')) workflow = 'content-engine.yml'
+    const dispatchResult = await dispatchWorkflow(GH_TOKEN, workflow)
+    agentActionNote = `\n\n[ACTION TAKEN] Triggered ${workflow}. ${dispatchResult.message}.`
+    if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
+  }
+
+  const systemCtx = BRAND_CTX + liveContext + agentActionNote
 
   contentParts.push({ type: 'text', text: message })
 
