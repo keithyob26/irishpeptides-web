@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { spawnSync } from 'child_process'
+import fs from 'fs'
 
 export const runtime = 'nodejs'
 
@@ -568,9 +569,19 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // Match jarvis-web: check if Claude CLI exists before calling, fall back to Gemini if not
+  const claudeAvailable = (() => { try { return fs.existsSync(CLAUDE_CMD) } catch { return false } })()
+
   let modelRes: Response
   if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
-  else if (model === 'claude') modelRes = await streamClaude(systemCtx, contentParts)
+  else if (model === 'claude') {
+    if (claudeAvailable) {
+      modelRes = await streamClaude(systemCtx, contentParts)
+    } else {
+      // Claude CLI not available (cloud deploy) — fall back to Gemini silently
+      modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
+    }
+  }
   else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
   else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
 
