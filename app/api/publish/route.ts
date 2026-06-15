@@ -158,10 +158,22 @@ async function publishToBlog(slug: string, content: string, date: string): Promi
   }
 }
 
+// ── CallMeBot WhatsApp notification ──────────────────────────────────────────
+
+async function sendWhatsApp(message: string): Promise<void> {
+  const key = process.env.CALLMEBOT_API_KEY || '7883019'
+  const phone = process.env.CALLMEBOT_PHONE || '353896554700'
+  const encoded = encodeURIComponent(message)
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${key}`
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(6000) })
+  } catch {}
+}
+
 // ── POST /api/publish ─────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const { id, action, type, content, title, slug, date } = await req.json() as {
+  const { id, action, type, content, title, slug, date, reason } = await req.json() as {
     id: string
     action: 'approve' | 'reject'
     type: string
@@ -169,10 +181,22 @@ export async function POST(req: NextRequest) {
     title?: string
     slug?: string
     date?: string
+    reason?: string
   }
 
   if (action === 'reject') {
     await updateOutcomeStatus(id, 'rejected')
+    // If rejection reason provided, re-queue for rewrite via workflow dispatch
+    if (reason && process.env.GITHUB_TOKEN) {
+      try {
+        await fetch(`https://api.github.com/repos/${OUTCOMES_REPO}/actions/workflows/content-engine.yml/dispatches`, {
+          method: 'POST',
+          headers: { Authorization: `token ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: 'master', inputs: { topic: title || id, feedback: reason } }),
+          signal: AbortSignal.timeout(8000),
+        })
+      } catch {}
+    }
     return NextResponse.json({ ok: true, status: 'rejected' })
   }
 
@@ -187,7 +211,6 @@ export async function POST(req: NextRequest) {
     const r = await publishToResend(title || 'Irish Peptides Newsletter', content)
     results.newsletter = r
   } else {
-    // social (instagram, tiktok, social)
     const r = await publishToBuffer(content)
     results.social = r
   }
@@ -196,5 +219,36 @@ export async function POST(req: NextRequest) {
   const newStatus = anyFailed ? 'approved' : 'published'
   await updateOutcomeStatus(id, newStatus)
 
+  // WhatsApp confirmation
+  const statusMsg = anyFailed
+    ? `Irish Peptides: "${title || type}" approved — pending manual publish (Buffer/Resend blocked). Check dashboard.`
+    : `Irish Peptides: "${title || type}" published successfully.`
+  await sendWhatsApp(statusMsg)
+
   return NextResponse.json({ ok: true, status: newStatus, results })
+}
+
+// ── GET /api/publish — notify when new content pending ───────────────────────
+
+export async function GET() {
+  // Called by content agents after writing to outcomes.json
+  // Sends WhatsApp alert for pending approval items
+  const key = process.env.CALLMEBOT_API_KEY || '7883019'
+  if (!key || !GITHUB_TOKEN) return NextResponse.json({ ok: false })
+
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${OUTCOMES_REPO}/master/${OUTCOMES_PATH}`, {
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!r.ok) return NextResponse.json({ ok: false })
+    const d = await r.json()
+    const pending = (d.outcomes || []).filter((o: Record<string, unknown>) => o.status === 'pending_approval')
+    if (pending.length > 0) {
+      const titles = pending.slice(0, 3).map((o: Record<string, unknown>) => o.title || o.action).join(', ')
+      await sendWhatsApp(`Irish Peptides: ${pending.length} item(s) pending approval — ${titles}. View at irishpeptides-web.vercel.app/content`)
+    }
+    return NextResponse.json({ ok: true, pending: pending.length })
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: String(e) })
+  }
 }
