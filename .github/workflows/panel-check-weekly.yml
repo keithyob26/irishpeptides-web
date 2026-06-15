@@ -1,0 +1,38 @@
+name: Weekly Deep Panel Check
+
+on:
+  schedule:
+    - cron: '0 20 * * 0'  # Sunday 8pm UTC (same time as plan compliance)
+  workflow_dispatch:
+
+jobs:
+  deep-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run deep panel tests
+        env:
+          PLAYWRIGHT_BASE_URL: https://irishpeptides-web.vercel.app
+          JARVIS_PASSWORD: ${{ secrets.JARVIS_PASSWORD }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx playwright test e2e/panel-deep.spec.ts --reporter=list
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deep-panel-check-report-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 14
