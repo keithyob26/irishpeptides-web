@@ -220,9 +220,13 @@ export async function POST(req: NextRequest) {
   await updateOutcomeStatus(id, newStatus)
 
   // WhatsApp confirmation
+  const blogSlug = (slug || title || 'post').replace(/\s+/g, '-').toLowerCase().slice(0, 60)
+  const isBlog = type === 'blog' || type === 'blog_post'
   const statusMsg = anyFailed
-    ? `Irish Peptides: "${title || type}" approved — pending manual publish (Buffer/Resend blocked). Check dashboard.`
-    : `Irish Peptides: "${title || type}" published successfully.`
+    ? `Irish Peptides: "${title || type}" approved — pending manual publish. Check dashboard.`
+    : isBlog
+      ? `Irish Peptides blog published: "${title || slug}" — https://irishpeptides.ie/blog/${blogSlug}`
+      : `Irish Peptides: "${title || type}" published successfully.`
   await sendWhatsApp(statusMsg)
 
   return NextResponse.json({ ok: true, status: newStatus, results })
