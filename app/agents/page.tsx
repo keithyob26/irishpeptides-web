@@ -56,6 +56,8 @@ const AGENTS_RAW: AgentData[] = [
   { name: 'Protocol Guard',    schedule: 'On every post',   status: 'active',     desc: 'Adds disclaimers, removes medical claims, enforces brand safety.',       file: 'utils.py',                    model: 'Rule-based',        color: '#64748B' },
   { name: 'System Health',     schedule: 'Daily 6am UTC',   status: 'scheduled',  desc: 'Checks all API keys, services, commits health_results.json.',           file: 'agents/system_health.py',     model: 'Gemini',            color: '#EF4444' },
   { name: 'Video Pipeline',    schedule: 'Thursday 10am',   status: 'scheduled',  desc: 'Generates video scripts, thumbnails, captions from weekly topic.',      file: 'agents/video_pipeline.py',    model: 'Gemini → DeepSeek', color: '#F59E0B' },
+  { name: 'Skill Discovery',  schedule: 'Sunday 9pm UTC',  status: 'scheduled', desc: 'Searches GitHub for tools relevant to peptides/supplement ecommerce/SEO. Top 5 to WhatsApp + Notion.',    file: 'agents/skill_discovery.py',   model: 'GitHub API',        color: '#06B6D4' },
+  { name: 'Tool Ideas',       schedule: 'Sunday 8pm UTC',  status: 'scheduled', desc: 'Researches Reddit/GSC/competitors for free tool ideas. 3 ideas to pending_approval + WhatsApp alert.',       file: 'agents/tool_ideas_agent.py',  model: 'Gemini → DeepSeek', color: '#8B5CF6' },
 ]
 
 function AgentNode({ data }: NodeProps<AgentData>) {
