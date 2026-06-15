@@ -46,7 +46,7 @@ const STATUS_LABELS: Record<AgentStatus, string> = {
 
 const AGENTS_RAW: AgentData[] = [
   { name: 'Content Engine',    schedule: 'Tue/Thu/Sat 7am', status: 'scheduled',  desc: 'Generates blog, Instagram, TikTok, newsletter from calendar topics.',  file: 'agents/content_engine.py',    model: 'Gemini → DeepSeek', color: '#8B5CF6' },
-  { name: 'GA4 Monitor',       schedule: 'Daily 8am UTC',   status: 'scheduled',  desc: 'Pulls GA4 traffic, alerts on >20% drops, saves reports.',              file: 'agents/ga4_monitor.py',       model: 'Gemini → DeepSeek', color: '#14B8A6', warning: 'GA4_SERVICE_ACCOUNT_JSON missing' },
+  { name: 'GA4 Monitor',       schedule: 'Daily 8am UTC',   status: 'scheduled',  desc: 'Pulls GA4 traffic, alerts on >20% drops, saves reports.',              file: 'agents/ga4_monitor.py',       model: 'Gemini → DeepSeek', color: '#14B8A6' },
   { name: 'SEO Loop',          schedule: 'Monday 8am UTC',  status: 'scheduled',  desc: 'GSC keyword gaps → optimisation tasks → content suggestions.',          file: 'agents/seo_loop.py',          model: 'Gemini → DeepSeek', color: '#06B6D4' },
   { name: 'Newsletter Agent',  schedule: 'Sunday 10am UTC', status: 'scheduled',  desc: 'Builds weekly email digest, sends via Resend to subscribers.',          file: 'agents/newsletter_agent.py',  model: 'Gemini → DeepSeek', color: '#10B981' },
   { name: 'CFO Agent',         schedule: 'Sunday 8am UTC',  status: 'scheduled',  desc: 'GA4 + Resend + Stripe metrics → revenue summary + recommendations.',    file: 'agents/cfo_agent.py',         model: 'Gemini → DeepSeek', color: '#F59E0B' },
