@@ -3,6 +3,19 @@
 import { useEffect, useState, useCallback } from 'react'
 import PageHeader from '@/components/PageHeader'
 
+type MainTab = 'ga4' | 'search'
+
+interface SearchConsoleData {
+  connected: boolean
+  error?: string
+  dateRange?: { startDate: string; endDate: string }
+  summary?: { totalClicks: number; totalImpressions: number; avgPosition: number; avgCtr: number; keywordCount: number }
+  keywords?: { query: string; clicks: number; impressions: number; ctr: number; position: number; status: 'green' | 'amber' | 'red' }[]
+  pages?: { page: string; clicks: number; impressions: number; ctr: number; position: number }[]
+  trends?: { date: string; clicks: number; impressions: number }[]
+  siteUrl?: string
+}
+
 interface AnalyticsData {
   connected: boolean
   error?: string
@@ -71,12 +84,167 @@ function fmtDur(sec: string) {
   return isNaN(s) ? '—' : `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
+const POSITION_COLOR: Record<string, string> = { green: '#22C55E', amber: '#F59E0B', red: '#EF4444' }
+
+function SearchTab({ days }: { days: string }) {
+  const [sc, setSc] = useState<SearchConsoleData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(`/api/search-console?days=${days}`)
+      setSc(await r.json())
+    } catch (e) {
+      setSc({ connected: false, error: String(e) })
+    } finally {
+      setLoading(false)
+    }
+  }, [days])
+
+  useEffect(() => { load() }, [load])
+
+  if (!sc?.connected) {
+    return (
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
+        <div className="text-[13px] font-semibold text-[#F1F5F9] mb-2">Search Console Not Connected</div>
+        <div className="text-[12px] text-[#94A3B8] mb-3">
+          {loading ? 'Fetching Search Console data…' : (sc?.error || 'GA4_SERVICE_ACCOUNT_JSON must have access to Search Console property.')}
+        </div>
+        <ol className="space-y-1.5 text-[12px] text-[#94A3B8]">
+          <li><span className="text-[#14B8A6] font-semibold">1.</span> Go to Search Console → Settings → Users and permissions</li>
+          <li><span className="text-[#14B8A6] font-semibold">2.</span> Add service account email from GA4_SERVICE_ACCOUNT_JSON as Full user</li>
+          <li><span className="text-[#14B8A6] font-semibold">3.</span> Add GSC_SITE_URL=https://irishpeptides.ie/ to Vercel env vars</li>
+        </ol>
+      </div>
+    )
+  }
+
+  const s = sc.summary!
+  const kws = sc.keywords || []
+  const green = kws.filter(k => k.status === 'green')
+  const amber = kws.filter(k => k.status === 'amber')
+  const red = kws.filter(k => k.status === 'red')
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Stat label="Total Clicks" value={loading ? '…' : s.totalClicks.toLocaleString()} />
+        <Stat label="Impressions" value={loading ? '…' : s.totalImpressions.toLocaleString()} />
+        <Stat label="Avg Position" value={loading ? '…' : s.avgPosition.toFixed(1)} sub="Lower is better" />
+        <Stat label="Avg CTR" value={loading ? '…' : s.avgCtr + '%'} sub="Click-through rate" />
+      </div>
+
+      {/* Position distribution */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Top 10 (Green)', count: green.length, color: '#22C55E', desc: 'Ranking well' },
+          { label: 'Pos 11–30 (Amber)', count: amber.length, color: '#F59E0B', desc: 'Improvement needed' },
+          { label: 'Pos 30+ (Red)', count: red.length, color: '#EF4444', desc: 'Poor visibility' },
+        ].map(b => (
+          <div key={b.label} className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: b.color }}>{b.label}</div>
+            <div className="text-2xl font-bold" style={{ color: b.color }}>{b.count}</div>
+            <div className="text-[10px] text-[#475569] mt-0.5">{b.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Click trend chart */}
+      {sc.trends && sc.trends.length > 0 && (
+        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-5">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">Click Trend</div>
+          {(() => {
+            const data = sc.trends!
+            const max = Math.max(...data.map(d => d.clicks), 1)
+            const pts = data.map((d, i) => {
+              const x = (i / Math.max(data.length - 1, 1)) * 100
+              const y = 100 - (d.clicks / max) * 90
+              return `${x.toFixed(1)},${y.toFixed(1)}`
+            }).join(' ')
+            return (
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-16">
+                <defs>
+                  <linearGradient id="gsc-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#14B8A6" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#14B8A6" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <polygon points={`0,100 ${pts} 100,100`} fill="url(#gsc-grad)" />
+                <polyline points={pts} fill="none" stroke="#14B8A6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              </svg>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* Keyword table */}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">Top Keywords</div>
+          <button onClick={load} className="text-[10px] text-[#475569] hover:text-[#14B8A6]">↺ Refresh</button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-[10px] text-[#475569] uppercase tracking-wide border-b border-white/[0.05]">
+                <th className="text-left pb-2 font-semibold">Keyword</th>
+                <th className="text-right pb-2 font-semibold">Position</th>
+                <th className="text-right pb-2 font-semibold">Clicks</th>
+                <th className="text-right pb-2 font-semibold">Impressions</th>
+                <th className="text-right pb-2 font-semibold">CTR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kws.slice(0, 30).map((k, i) => (
+                <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                  <td className="py-2 text-[#94A3B8] truncate max-w-[180px]">{k.query}</td>
+                  <td className="py-2 text-right">
+                    <span className="font-bold text-[13px]" style={{ color: POSITION_COLOR[k.status] }}>
+                      {k.position}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right font-semibold text-[#F1F5F9]">{k.clicks}</td>
+                  <td className="py-2 text-right text-[#64748B]">{k.impressions}</td>
+                  <td className="py-2 text-right text-[#64748B]">{k.ctr}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Poor ranking pages */}
+      {red.length > 0 && (
+        <div className="bg-[#EF4444]/5 border border-[#EF4444]/20 rounded-xl p-5">
+          <div className="text-[11px] font-semibold text-[#EF4444] uppercase tracking-wide mb-3">
+            Flagged for Improvement — Position 30+ ({red.length} keywords)
+          </div>
+          <div className="space-y-1">
+            {red.slice(0, 10).map((k, i) => (
+              <div key={i} className="flex items-center justify-between py-1 border-b border-white/[0.04] last:border-0">
+                <span className="text-[12px] text-[#94A3B8]">{k.query}</span>
+                <span className="text-[12px] text-[#EF4444] font-bold">pos {k.position}</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] text-[#F59E0B] mt-3">
+            SEO Loop agent runs Monday 8am — targets these keywords with optimised content.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [quickRange, setQuickRange] = useState<QuickRange>('30')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [mainTab, setMainTab] = useState<MainTab>('ga4')
 
   const fetchData = useCallback(async (range: QuickRange, start?: string, end?: string) => {
     setLoading(true)
@@ -123,7 +291,7 @@ export default function AnalyticsPage() {
             <ol className="space-y-2 text-[13px] text-[#94A3B8]">
               <li><span className="text-[#14B8A6] font-semibold">1.</span> Create service account → add Viewer role for GA4 property</li>
               <li><span className="text-[#14B8A6] font-semibold">2.</span> Download JSON key → minify to single line</li>
-              <li><span className="text-[#14B8A6] font-semibold">3.</span> Add to Vercel: <code className="text-[#14B8A6]">GA4_SERVICE_ACCOUNT_JSON</code> + <code className="text-[#14B8A6]">GA4_PROPERTY_ID=properties/453318049</code></li>
+              <li><span className="text-[#14B8A6] font-semibold">3.</span> Add to Vercel: <code className="text-[#14B8A6]">GA4_SERVICE_ACCOUNT_JSON</code> + <code className="text-[#14B8A6]">GA4_PROPERTY_ID=properties/539754026</code></li>
             </ol>
           </div>
         )}
@@ -140,6 +308,27 @@ export default function AnalyticsPage() {
         subtitle={`GA4 · ${data.propertyId} · ${data.dateRange?.startDate} to ${data.dateRange?.endDate}`}
         badge={{ label: loading ? 'Refreshing…' : 'Live', ok: true }}
       />
+
+      {/* Main tab switcher */}
+      <div className="flex gap-2 mb-6">
+        {([
+          { key: 'ga4', label: 'GA4 Traffic' },
+          { key: 'search', label: 'Organic Search' },
+        ] as { key: MainTab; label: string }[]).map(t => (
+          <button key={t.key} onClick={() => setMainTab(t.key)}
+            className={`text-[12px] font-semibold px-4 py-2 rounded-lg border transition-all ${
+              mainTab === t.key
+                ? 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
+                : 'border-white/[0.07] text-[#64748B] hover:text-[#F1F5F9]'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {mainTab === 'search' && <SearchTab days={quickRange === 'custom' ? '28' : quickRange} />}
+
+      {mainTab === 'ga4' && <>
 
       {/* Date range filter */}
       <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-4 mb-6 flex flex-wrap items-center gap-3">
@@ -233,6 +422,8 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
+
+      </>}
     </div>
   )
 }
