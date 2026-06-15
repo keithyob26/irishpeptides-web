@@ -17,6 +17,15 @@ interface DeployInfo {
   autoDeployEnabled: boolean
 }
 
+interface AgentAction {
+  id: string
+  agent: string
+  action: string
+  status: string
+  created_at: string
+  content?: string
+}
+
 const PAGES = [
   { path: '/', title: 'Home' }, { path: '/about.html', title: 'About' },
   { path: '/coaching', title: 'Coaching' }, { path: '/blog', title: 'Blog' },
@@ -42,13 +51,16 @@ export default function SitePage() {
   const [deployResult, setDeployResult] = useState<{ ok?: boolean; sha?: string; error?: string } | null>(null)
   const [runningTask, setRunningTask] = useState<string | null>(null)
   const [taskResults, setTaskResults] = useState<Record<string, { ok: boolean; msg: string }>>({})
+  const [agentActions, setAgentActions] = useState<AgentAction[]>([])
+  const [historyTab, setHistoryTab] = useState<'deploys' | 'qa' | 'agents'>('deploys')
 
   async function load() {
     setLoading(true)
     try {
-      const [statusRes, deployRes] = await Promise.allSettled([
+      const [statusRes, deployRes, outcomesRes] = await Promise.allSettled([
         fetch('/api/site-status').then(r => r.json()),
         fetch('/api/workflow-dispatch').then(r => r.json()),
+        fetch('/api/outcomes').then(r => r.json()),
       ])
       if (statusRes.status === 'fulfilled') {
         setSiteCommits(statusRes.value.siteCommits || [])
@@ -56,6 +68,13 @@ export default function SitePage() {
       }
       if (deployRes.status === 'fulfilled') {
         setDeployInfo(deployRes.value)
+      }
+      if (outcomesRes.status === 'fulfilled') {
+        const siteAgents = ['site_qa', 'site_optimiser', 'seo_loop', 'plan_compliance', 'system_health', 'site_health']
+        const actions: AgentAction[] = (outcomesRes.value.outcomes || []).filter((o: AgentAction) =>
+          siteAgents.some(a => (o.agent || '').toLowerCase().includes(a))
+        ).slice(0, 20)
+        setAgentActions(actions)
       }
     } catch {}
     finally { setLoading(false) }
@@ -233,7 +252,7 @@ export default function SitePage() {
       </div>
 
       {/* Commit Logs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">Site Commits</div>
@@ -280,6 +299,86 @@ export default function SitePage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Action History */}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">Action History</div>
+          <div className="flex gap-1">
+            {(['deploys', 'qa', 'agents'] as const).map(tab => (
+              <button key={tab} onClick={() => setHistoryTab(tab)}
+                className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all capitalize ${
+                  historyTab === tab
+                    ? 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
+                    : 'border-white/[0.07] text-[#64748B] hover:text-[#F1F5F9]'
+                }`}>
+                {tab === 'deploys' ? 'Auto-Deploys' : tab === 'qa' ? 'Site QA' : 'Agent Actions'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {historyTab === 'deploys' && (
+          <div className="space-y-2">
+            {siteCommits.length === 0 ? (
+              <div className="text-[12px] text-[#64748B]">No deploy history yet</div>
+            ) : siteCommits.map((c, i) => (
+              <div key={i} className="flex items-start gap-3 py-2 border-b border-white/[0.04] last:border-0">
+                <div className="w-2 h-2 rounded-full bg-[#22C55E] mt-1.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] text-[#F1F5F9] truncate">{c.message.split('\n')[0]}</div>
+                  <div className="text-[10px] text-[#475569] mt-0.5">
+                    Committed to irishpeptides-website — Cloudflare auto-deployed
+                  </div>
+                  <div className="text-[10px] text-[#334155]">{new Date(c.date).toLocaleString()}</div>
+                </div>
+                {c.url && <a href={c.url} target="_blank" rel="noreferrer" className="text-[10px] text-[#475569] hover:text-[#14B8A6]">View →</a>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {historyTab === 'qa' && (
+          <div className="space-y-2">
+            {!deployInfo?.lastQA ? (
+              <div className="text-[12px] text-[#64748B]">No QA run history yet — trigger a QA run above</div>
+            ) : (
+              <div className="flex items-start gap-3 py-2">
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${deployInfo.lastQA.conclusion === 'success' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`} />
+                <div>
+                  <div className="text-[12px] text-[#F1F5F9]">
+                    Site QA — {deployInfo.lastQA.conclusion === 'success' ? 'All checks passed' : 'Issues detected'}
+                  </div>
+                  <div className="text-[10px] text-[#475569] mt-0.5">Playwright smoke tests on irishpeptides.ie</div>
+                  <div className="text-[10px] text-[#334155]">{new Date(deployInfo.lastQA.date).toLocaleString()}</div>
+                  <a href={deployInfo.lastQA.url} target="_blank" rel="noreferrer" className="text-[10px] text-[#14B8A6] hover:underline">View GitHub Actions run →</a>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {historyTab === 'agents' && (
+          <div className="space-y-2">
+            {agentActions.length === 0 ? (
+              <div className="text-[12px] text-[#64748B]">No agent actions recorded yet — agents write to outcomes.json after each run</div>
+            ) : agentActions.map((a, i) => (
+              <div key={i} className="flex items-start gap-3 py-2 border-b border-white/[0.04] last:border-0">
+                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${a.status === 'success' || a.status === 'completed' ? 'bg-[#22C55E]' : 'bg-[#F59E0B]'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium text-[#F1F5F9]">{a.agent}</div>
+                  <div className="text-[11px] text-[#94A3B8] truncate">{a.action}</div>
+                  {a.content && <div className="text-[10px] text-[#64748B] truncate mt-0.5">{a.content.slice(0, 100)}</div>}
+                  <div className="text-[10px] text-[#334155] mt-0.5">{new Date(a.created_at).toLocaleString()}</div>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${a.status === 'success' || a.status === 'completed' ? 'text-[#22C55E] bg-[#22C55E]/10' : 'text-[#F59E0B] bg-[#F59E0B]/10'}`}>
+                  {a.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
