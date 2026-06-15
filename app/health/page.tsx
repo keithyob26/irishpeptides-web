@@ -43,11 +43,11 @@ interface BackupHealthData {
 const BROKEN_OVERRIDES: Record<string, { status: ServiceStatus; detail: string }> = {
   BUFFER_ACCESS_TOKEN: {
     status: 'warn',
-    detail: 'OIDC token rejected — needs OAuth flow at buffer.com/developers/apps',
+    detail: 'Disconnected — needs OAuth flow at buffer.com/developers/apps (manually blocked)',
   },
   MANYCHAT_API_KEY: {
     status: 'warn',
-    detail: 'API key returning 401 — regenerate at app.manychat.com/settings/api',
+    detail: 'Disconnected — regenerate key at app.manychat.com/settings/api (manually blocked)',
   },
 }
 
@@ -98,7 +98,7 @@ export default function HealthPage() {
   }, [])
 
   const SERVICE_CHECKS: CheckItem[] = [
-    { label: 'Claude AI (Chat)',      key: 'ANTHROPIC_API_KEY',       status: 'unknown', detail: '' },
+    { label: 'Claude CLI (Chat)',     key: 'CLAUDE_CLI',              status: 'ok',     detail: 'Active — Team plan via CLI, zero personal cost' },
     { label: 'Gemini Flash (Chat)',   key: 'GEMINI_API_KEY',          status: 'unknown', detail: '' },
     { label: 'DeepSeek AI (Chat)',    key: 'DEEPSEEK_API_KEY',        status: 'unknown', detail: '' },
     { label: 'GitHub',                key: 'GITHUB_TOKEN',            status: 'unknown', detail: '' },
@@ -112,6 +112,9 @@ export default function HealthPage() {
   ]
 
   const resolved: CheckItem[] = SERVICE_CHECKS.map(c => {
+    // Static overrides — skip key check for these
+    if (c.status === 'ok') return c
+
     const broken = BROKEN_OVERRIDES[c.key]
     const hasKey = keys[c.key]
 
@@ -124,12 +127,10 @@ export default function HealthPage() {
       return {
         ...c,
         status: criticalKeys.includes(c.key) ? 'error' : 'warn',
-        detail: c.key === 'ANTHROPIC_API_KEY'
-          ? 'Not set — add ANTHROPIC_API_KEY to Vercel to activate Claude chat'
-          : c.key === 'STRIPE_API_KEY'
+        detail: c.key === 'STRIPE_API_KEY'
           ? 'Not configured — revenue data unavailable'
           : c.key === 'GA4_SERVICE_ACCOUNT_JSON'
-          ? 'Not set — Analytics panel shows setup guide'
+          ? 'Not set — check Vercel environment variables'
           : `API key missing`,
       }
     }
