@@ -49,6 +49,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/memory",     icon: "🧠", label: "Memory"          },
       { href: "/self-build", icon: "⚙️", label: "Self Build"      },
       { href: "/settings",   icon: "⚙️", label: "Settings"        },
+      { href: "/help",       icon: "❓", label: "Help"             },
     ],
   },
 ];
