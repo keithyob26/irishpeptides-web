@@ -16,7 +16,23 @@ const AGENTS = [
   { name: "Site Optimiser",   schedule: "Sunday 9am"      },
 ];
 
-export default function HomePage() {
+async function getSessionStatus() {
+  try {
+    const res = await fetch(
+      'https://raw.githubusercontent.com/keithyob26/irishpeptides-jarvis/master/memory/resume_agent_results.json',
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export default async function HomePage() {
+  const sessionStatus = await getSessionStatus();
+  const interrupted: Array<{ title: string; age_minutes: number }> = sessionStatus?.interrupted ?? [];
+
   return (
     <div className="p-8 max-w-5xl">
       <PageHeader
@@ -24,6 +40,29 @@ export default function HomePage() {
         subtitle="irishpeptides.ie · Jarvis Dashboard"
         badge={{ label: "v1.0", ok: true }}
       />
+
+      {interrupted.length > 0 && (
+        <div className="bg-[#2D1B00] border border-[#F59E0B]/30 rounded-xl p-4 mb-6">
+          <div className="text-[11px] font-semibold text-[#F59E0B] uppercase tracking-wide mb-2">
+            ⚠️ Interrupted Sessions Detected
+          </div>
+          <div className="space-y-1">
+            {interrupted.map((item, i) => (
+              <div key={i} className="text-[12px] text-[#FCD34D]">
+                • {item.title} <span className="text-[#94A3B8]">({item.age_minutes}m ago)</span>
+              </div>
+            ))}
+          </div>
+          <a
+            href="https://www.notion.so/37da0eb7e3ea819eaf5be76db92a7c8c"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-[#F59E0B] mt-2 inline-block hover:underline"
+          >
+            View Notion Queue →
+          </a>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {KPIS.map(k => (
