@@ -19,6 +19,15 @@ interface Outcome {
   image_url?: string
   video_url?: string
   scheduled_date?: string
+  hashtags?: string[]
+  channels?: string[]
+  skills_used?: string[]
+  tools_used?: string[]
+  model?: string
+  meta_title?: string
+  meta_description?: string
+  keywords?: string[]
+  read_time?: number
 }
 
 type ContentType = 'all' | 'blog' | 'social' | 'newsletter'
@@ -74,6 +83,8 @@ export default function ContentStudioPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<ContentType>('all')
   const [error, setError] = useState('')
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -110,8 +121,10 @@ export default function ContentStudioPage() {
       return t === filter
     })
 
-  async function decide(o: Outcome, action: 'approve' | 'reject') {
+  async function decide(o: Outcome, action: 'approve' | 'reject', reason?: string) {
     setProcessing(o.id)
+    setRejectingId(null)
+    setRejectReason('')
     setPublishResult(prev => ({ ...prev, [o.id]: '' }))
     try {
       const res = await fetch('/api/publish', {
@@ -125,10 +138,13 @@ export default function ContentStudioPage() {
           title: o.title || o.action,
           slug: o.slug || o.action?.replace(/\s+/g, '-').toLowerCase().slice(0, 60),
           date: o.scheduled_date || new Date().toISOString().split('T')[0],
+          reason: reason || undefined,
         }),
       })
       const data = await res.json()
-      const msg = action === 'reject' ? 'Rejected' : (data.status === 'published' ? 'Published ✓' : 'Approved (publish pending)')
+      const msg = action === 'reject'
+        ? `Rejected${reason ? ' — agent will rewrite' : ''}`
+        : (data.status === 'published' ? 'Published ✓' : 'Approved (publish pending)')
       setPublishResult(prev => ({ ...prev, [o.id]: msg }))
       setOutcomes(prev => prev.map(item =>
         item.id === o.id ? { ...item, status: data.status || (action === 'reject' ? 'rejected' : 'approved') } : item
@@ -268,7 +284,7 @@ export default function ContentStudioPage() {
                             {processing === o.id ? '…' : '✓ Approve & Publish'}
                           </button>
                           <button
-                            onClick={() => decide(o, 'reject')}
+                            onClick={() => setRejectingId(rejectingId === o.id ? null : o.id)}
                             disabled={processing === o.id}
                             className="px-4 py-2 text-[12px] font-semibold rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all disabled:opacity-50"
                           >
@@ -276,6 +292,40 @@ export default function ContentStudioPage() {
                           </button>
                         </div>
                       </div>
+
+                      {/* Reject reason */}
+                      {rejectingId === o.id && (
+                        <div className="px-5 pb-4">
+                          <div className="bg-[#EF4444]/5 border border-[#EF4444]/20 rounded-lg p-3">
+                            <div className="text-[11px] font-semibold text-[#EF4444] mb-2">Rejection reason — agent rewrites based on this</div>
+                            <textarea
+                              value={rejectReason}
+                              onChange={e => setRejectReason(e.target.value)}
+                              placeholder="e.g. Too salesy, needs more evidence-based tone. Focus on research, not hype."
+                              rows={2}
+                              className="w-full bg-[#161616] border border-white/[0.07] rounded-lg px-3 py-2 text-[12px] text-[#F1F5F9] placeholder-[#475569] outline-none focus:border-[#EF4444]/40 resize-none"
+                            />
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={() => decide(o, 'reject', rejectReason)}
+                                className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] hover:bg-[#EF4444]/20">
+                                Confirm Reject
+                              </button>
+                              <button onClick={() => setRejectingId(null)} className="text-[11px] text-[#475569] hover:text-[#F1F5F9]">Cancel</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      {isExpanded && (o.channels?.length || o.hashtags?.length || o.skills_used?.length || o.model) && (
+                        <div className="px-5 pb-4 space-y-2">
+                          {o.model && <div className="flex items-center gap-2"><span className="text-[10px] text-[#475569] w-16">Model:</span><span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">{o.model}</span></div>}
+                          {o.channels?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Channels:</span>{o.channels.map(c=><span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/20">{c}</span>)}</div>}
+                          {o.hashtags?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Tags:</span><div className="text-[10px] text-[#94A3B8]">{o.hashtags.slice(0,8).join(' ')}</div></div>}
+                          {o.skills_used?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Skills:</span>{o.skills_used.map(s=><span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20">{s}</span>)}</div>}
+                          {o.keywords?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Keywords:</span><div className="text-[10px] text-[#94A3B8]">{o.keywords!.join(', ')}</div></div>}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
