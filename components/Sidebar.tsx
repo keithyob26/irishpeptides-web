@@ -33,16 +33,18 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "System",
     items: [
-      { href: "/agents",     icon: "🤖", label: "Agent Network"   },
-      { href: "/approvals",  icon: "✅", label: "Approvals"       },
-      { href: "/notion",     icon: "📋", label: "Notion"          },
-      { href: "/health",     icon: "🏥", label: "System Health"   },
+      { href: "/agents",        icon: "🤖", label: "Agent Network"   },
+      { href: "/agent-skills",  icon: "🎓", label: "Agent Skills"    },
+      { href: "/approvals",     icon: "✅", label: "Approvals"       },
+      { href: "/notion",        icon: "📋", label: "Notion"          },
+      { href: "/health",        icon: "🏥", label: "System Health"   },
     ],
   },
   {
     title: "Platform",
     items: [
       { href: "/site",       icon: "🌐", label: "Site Control"    },
+      { href: "/cowork",     icon: "🤝", label: "Cowork"          },
       { href: "/brain",      icon: "🧬", label: "Brain"           },
       { href: "/memory",     icon: "🧠", label: "Memory"          },
       { href: "/self-build", icon: "⚙️", label: "Self Build"      },

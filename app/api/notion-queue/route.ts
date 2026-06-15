@@ -9,7 +9,6 @@ export async function GET() {
   }
 
   try {
-    // Get page blocks (to-do items)
     const res = await fetch(
       `https://api.notion.com/v1/blocks/${BUILD_QUEUE_PAGE_ID}/children?page_size=100`,
       {
@@ -17,7 +16,7 @@ export async function GET() {
           Authorization: `Bearer ${NOTION_API_KEY}`,
           "Notion-Version": "2022-06-28",
         },
-        next: { revalidate: 300 },
+        cache: "no-store",
       }
     );
 
@@ -49,25 +48,62 @@ export async function GET() {
   }
 }
 
-export async function PATCH(req: NextRequest) {
-  if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 })
+// Create a new to_do task in the Build Queue
+export async function POST(req: NextRequest) {
+  if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 });
   try {
-    const { blockId, checked } = await req.json() as { blockId: string; checked: boolean }
-    const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
-      method: 'PATCH',
+    const { text, checked = false } = await req.json() as { text: string; checked?: boolean };
+    if (!text) return NextResponse.json({ error: "text required" }, { status: 400 });
+
+    const res = await fetch(`https://api.notion.com/v1/blocks/${BUILD_QUEUE_PAGE_ID}/children`, {
+      method: "PATCH",
       headers: {
         Authorization: `Bearer ${NOTION_API_KEY}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json',
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        children: [{
+          object: "block",
+          type: "to_do",
+          to_do: {
+            rich_text: [{ type: "text", text: { content: text } }],
+            checked,
+          },
+        }],
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      return NextResponse.json({ error: err.message || "Notion error" }, { status: 500 });
+    }
+    const result = await res.json();
+    return NextResponse.json({ ok: true, id: result.results?.[0]?.id });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
+}
+
+// Update an existing block (check/uncheck)
+export async function PATCH(req: NextRequest) {
+  if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 });
+  try {
+    const { blockId, checked } = await req.json() as { blockId: string; checked: boolean };
+    const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ to_do: { checked } }),
-    })
+    });
     if (!res.ok) {
-      const err = await res.json()
-      return NextResponse.json({ error: err.message }, { status: 500 })
+      const err = await res.json();
+      return NextResponse.json({ error: err.message }, { status: 500 });
     }
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

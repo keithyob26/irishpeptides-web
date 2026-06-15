@@ -6,7 +6,7 @@ const FILE_PATH = "memory/outcomes.json";
 
 export async function GET() {
   if (!GITHUB_TOKEN) {
-    return NextResponse.json({ outcomes: [], pendingApprovals: [] });
+    return NextResponse.json({ outcomes: [], pendingApprovals: [], error: "GITHUB_TOKEN not set" });
   }
 
   try {
@@ -14,15 +14,15 @@ export async function GET() {
       `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`,
       {
         headers: {
-          Authorization: `Bearer ${GITHUB_TOKEN}`,
+          Authorization: `token ${GITHUB_TOKEN}`,
           Accept: "application/vnd.github+json",
         },
-        next: { revalidate: 60 },
+        cache: "no-store",
       }
     );
 
     if (!res.ok) {
-      return NextResponse.json({ outcomes: [], pendingApprovals: [], note: "outcomes.json not found in repo" });
+      return NextResponse.json({ outcomes: [], pendingApprovals: [], sha: "", note: "outcomes.json not found or inaccessible" });
     }
 
     const data = await res.json();
@@ -41,21 +41,21 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // Write updated outcomes.json back to GitHub
   if (!GITHUB_TOKEN) {
     return NextResponse.json({ error: "GITHUB_TOKEN not set" }, { status: 500 });
   }
 
   const { outcomes, sha } = await req.json();
-
-  const content = Buffer.from(JSON.stringify({ outcomes }, null, 2)).toString("base64");
+  const content = Buffer.from(
+    JSON.stringify({ outcomes, _meta: { description: "Agent run outcomes synced to GitHub" } }, null, 2)
+  ).toString("base64");
 
   const res = await fetch(
     `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`,
     {
       method: "PUT",
       headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Authorization: `token ${GITHUB_TOKEN}`,
         Accept: "application/vnd.github+json",
         "Content-Type": "application/json",
       },
@@ -71,6 +71,5 @@ export async function POST(req: Request) {
     const err = await res.json();
     return NextResponse.json({ error: err }, { status: 500 });
   }
-
   return NextResponse.json({ ok: true });
 }

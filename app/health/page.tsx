@@ -15,11 +15,26 @@ interface AgentRun {
   } | null
 }
 
+type ServiceStatus = 'ok' | 'warn' | 'error' | 'unknown'
+
 interface CheckItem {
   label: string
   key: string
-  status: 'ok' | 'warn' | 'error' | 'unknown'
+  status: ServiceStatus
   detail: string
+  overrideStatus?: ServiceStatus  // hardcoded known-broken override
+  overrideDetail?: string
+}
+
+const BROKEN_OVERRIDES: Record<string, { status: ServiceStatus; detail: string }> = {
+  BUFFER_ACCESS_TOKEN: {
+    status: 'warn',
+    detail: 'OIDC token rejected — needs OAuth flow at buffer.com/developers/apps',
+  },
+  MANYCHAT_API_KEY: {
+    status: 'warn',
+    detail: 'API key returning 401 — regenerate at app.manychat.com/settings/api',
+  },
 }
 
 export default function HealthPage() {
@@ -27,14 +42,20 @@ export default function HealthPage() {
   const [agentError, setAgentError] = useState('')
   const [loading, setLoading] = useState(true)
   const [lastChecked, setLastChecked] = useState('')
+  const [keys, setKeys] = useState<Record<string, boolean>>({})
 
   async function load() {
     setLoading(true)
     try {
-      const r = await fetch('/api/agent-status')
-      const d = await r.json()
-      if (d.error) setAgentError(d.error)
-      else setAgents(d.agents || [])
+      const [agentRes, keyRes] = await Promise.allSettled([
+        fetch('/api/agent-status').then(r => r.json()),
+        fetch('/api/check-keys').then(r => r.json()),
+      ])
+      if (agentRes.status === 'fulfilled') {
+        if (agentRes.value.error) setAgentError(agentRes.value.error)
+        else setAgents(agentRes.value.agents || [])
+      }
+      if (keyRes.status === 'fulfilled') setKeys(keyRes.value || {})
       setLastChecked(new Date().toLocaleTimeString())
     } catch (e) {
       setAgentError(String(e))
@@ -45,27 +66,50 @@ export default function HealthPage() {
 
   useEffect(() => { load() }, [])
 
-  // Service checks based on known env var presence (checked server-side via check-keys)
-  const [keys, setKeys] = useState<Record<string, boolean>>({})
-  useEffect(() => {
-    fetch('/api/check-keys').then(r => r.json()).then(d => setKeys(d || {}))
-  }, [])
-
   const SERVICE_CHECKS: CheckItem[] = [
-    { label: 'Resend (Newsletter)', key: 'RESEND_API_KEY', status: keys['RESEND_API_KEY'] ? 'ok' : 'warn', detail: keys['RESEND_API_KEY'] ? 'Connected' : 'API key missing' },
-    { label: 'Gemini AI',           key: 'GEMINI_API_KEY', status: keys['GEMINI_API_KEY'] ? 'ok' : 'warn', detail: keys['GEMINI_API_KEY'] ? 'Connected' : 'API key missing' },
-    { label: 'DeepSeek AI',         key: 'DEEPSEEK_API_KEY', status: keys['DEEPSEEK_API_KEY'] ? 'ok' : 'warn', detail: keys['DEEPSEEK_API_KEY'] ? 'Connected' : 'API key missing' },
-    { label: 'GitHub',              key: 'GITHUB_TOKEN', status: keys['GITHUB_TOKEN'] ? 'ok' : 'error', detail: keys['GITHUB_TOKEN'] ? 'Connected' : 'Token missing — agents cannot commit' },
-    { label: 'Notion',              key: 'NOTION_API_KEY', status: keys['NOTION_API_KEY'] ? 'ok' : 'warn', detail: keys['NOTION_API_KEY'] ? 'Connected' : 'API key missing' },
-    { label: 'ManyChat',            key: 'MANYCHAT_API_KEY', status: keys['MANYCHAT_API_KEY'] ? 'ok' : 'warn', detail: keys['MANYCHAT_API_KEY'] ? 'Connected' : 'API key missing' },
-    { label: 'Buffer',              key: 'BUFFER_ACCESS_TOKEN', status: keys['BUFFER_ACCESS_TOKEN'] ? 'ok' : 'warn', detail: keys['BUFFER_ACCESS_TOKEN'] ? 'Connected' : 'Token missing' },
-    { label: 'Stripe',              key: 'STRIPE_API_KEY', status: keys['STRIPE_API_KEY'] ? 'ok' : 'warn', detail: keys['STRIPE_API_KEY'] ? 'Connected' : 'Not configured — revenue data unavailable' },
-    { label: 'Google Analytics',    key: 'GA4_SERVICE_ACCOUNT_JSON', status: keys['GA4_SERVICE_ACCOUNT_JSON'] ? 'ok' : 'warn', detail: keys['GA4_SERVICE_ACCOUNT_JSON'] ? 'Connected' : 'Service account JSON missing' },
-    { label: 'CallMeBot (WhatsApp)',key: 'CALLMEBOT_API_KEY', status: keys['CALLMEBOT_API_KEY'] ? 'ok' : 'warn', detail: keys['CALLMEBOT_API_KEY'] ? 'Connected' : 'API key missing' },
+    { label: 'Claude AI (Chat)',      key: 'ANTHROPIC_API_KEY',       status: 'unknown', detail: '' },
+    { label: 'Gemini Flash (Chat)',   key: 'GEMINI_API_KEY',          status: 'unknown', detail: '' },
+    { label: 'DeepSeek AI (Chat)',    key: 'DEEPSEEK_API_KEY',        status: 'unknown', detail: '' },
+    { label: 'GitHub',                key: 'GITHUB_TOKEN',            status: 'unknown', detail: '' },
+    { label: 'Notion',                key: 'NOTION_API_KEY',          status: 'unknown', detail: '' },
+    { label: 'Resend (Newsletter)',   key: 'RESEND_API_KEY',          status: 'unknown', detail: '' },
+    { label: 'Buffer (Scheduling)',   key: 'BUFFER_ACCESS_TOKEN',     status: 'unknown', detail: '' },
+    { label: 'ManyChat (DM Auto)',    key: 'MANYCHAT_API_KEY',        status: 'unknown', detail: '' },
+    { label: 'CallMeBot (WhatsApp)', key: 'CALLMEBOT_API_KEY',       status: 'unknown', detail: '' },
+    { label: 'Stripe (Revenue)',      key: 'STRIPE_API_KEY',          status: 'unknown', detail: '' },
+    { label: 'Google Analytics',      key: 'GA4_SERVICE_ACCOUNT_JSON',status: 'unknown', detail: '' },
   ]
 
-  const okCount = SERVICE_CHECKS.filter(c => c.status === 'ok').length
-  const errorCount = SERVICE_CHECKS.filter(c => c.status === 'error').length
+  const resolved: CheckItem[] = SERVICE_CHECKS.map(c => {
+    const broken = BROKEN_OVERRIDES[c.key]
+    const hasKey = keys[c.key]
+
+    // Known-broken integrations regardless of key presence
+    if (broken && hasKey) {
+      return { ...c, status: broken.status, detail: `Key set — ${broken.detail}` }
+    }
+
+    // Key not present
+    if (!hasKey) {
+      const criticalKeys = ['GITHUB_TOKEN']
+      return {
+        ...c,
+        status: criticalKeys.includes(c.key) ? 'error' : 'warn',
+        detail: c.key === 'ANTHROPIC_API_KEY'
+          ? 'Not set — add ANTHROPIC_API_KEY to Vercel to activate Claude chat'
+          : c.key === 'STRIPE_API_KEY'
+          ? 'Not configured — revenue data unavailable'
+          : c.key === 'GA4_SERVICE_ACCOUNT_JSON'
+          ? 'Not set — Analytics panel shows setup guide'
+          : `API key missing`,
+      }
+    }
+
+    return { ...c, status: 'ok', detail: 'Connected' }
+  })
+
+  const okCount = resolved.filter(c => c.status === 'ok').length
+  const errorCount = resolved.filter(c => c.status === 'error').length
 
   function conclusionBadge(run: AgentRun['latestRun']) {
     if (!run) return { label: 'No runs', color: '#475569' }
@@ -77,33 +121,43 @@ export default function HealthPage() {
     return { label: run.conclusion || run.status, color: '#64748B' }
   }
 
-  const statusClass = {
-    ok: 'status-green',
-    warn: 'status-amber',
-    error: 'status-red',
-    unknown: 'status-grey',
+  const statusDot: Record<ServiceStatus, string> = {
+    ok: '#22C55E',
+    warn: '#F59E0B',
+    error: '#EF4444',
+    unknown: '#475569',
   }
 
   return (
     <div className="p-8 max-w-5xl">
       <PageHeader
-        title="🏥 System Health"
+        title="System Health"
         subtitle={`All services and agent status${lastChecked ? ` · checked ${lastChecked}` : ''}`}
-        badge={{ label: `${okCount}/${SERVICE_CHECKS.length} ok`, ok: errorCount === 0 }}
+        badge={{ label: `${okCount}/${resolved.length} ok`, ok: errorCount === 0 }}
       />
 
       {/* Service checks */}
       <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 mb-6">
-        <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-4">
-          Service Connections
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">
+            Service Connections
+          </div>
+          <button onClick={load} className="text-[11px] text-[#64748B] hover:text-[#14B8A6] transition-colors">
+            ↺ Refresh
+          </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {SERVICE_CHECKS.map(c => (
+          {resolved.map(c => (
             <div key={c.key} className="flex items-center gap-3 py-2 border-b border-white/[0.04] last:border-0">
-              <span className={`status-dot ${statusClass[c.status]} shrink-0`} />
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: statusDot[c.status] }}
+              />
               <div className="flex-1 min-w-0">
                 <div className="text-[12px] font-medium text-[#F1F5F9]">{c.label}</div>
-                <div className="text-[11px] text-[#64748B]">{c.detail}</div>
+                <div className="text-[11px]" style={{ color: c.status === 'error' ? '#EF4444' : c.status === 'warn' ? '#F59E0B' : '#64748B' }}>
+                  {c.detail}
+                </div>
               </div>
             </div>
           ))}
@@ -157,7 +211,7 @@ export default function HealthPage() {
               )
             })}
             {agents.length === 0 && (
-              <div className="text-[13px] text-[#64748B]">No workflows found in repository</div>
+              <div className="text-[13px] text-[#64748B]">No workflows found</div>
             )}
           </div>
         )}
