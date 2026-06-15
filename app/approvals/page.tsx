@@ -11,7 +11,22 @@ interface Outcome {
   status: string
   created_at: string
   token?: string
-  reason?: string
+  source?: 'github' | 'notion'
+  notionBlockId?: string
+}
+
+interface NotionTask {
+  id: string
+  title: string
+  checked: boolean
+}
+
+function NotionBadge() {
+  return (
+    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6366F1]/20 text-[#A5B4FC] border border-[#6366F1]/20 ml-1.5">
+      NOTION
+    </span>
+  )
 }
 
 export default function ApprovalsPage() {
@@ -23,11 +38,39 @@ export default function ApprovalsPage() {
 
   async function load() {
     setLoading(true)
+    setError('')
     try {
-      const r = await fetch('/api/outcomes')
-      const d = await r.json()
-      setOutcomes(d.outcomes || [])
-      setSha(d.sha || '')
+      const [outcomesRes, notionRes] = await Promise.allSettled([
+        fetch('/api/outcomes').then(r => r.json()),
+        fetch('/api/notion-queue').then(r => r.json()),
+      ])
+
+      const outcomesData = outcomesRes.status === 'fulfilled' ? outcomesRes.value : { outcomes: [], sha: '' }
+      const notionData = notionRes.status === 'fulfilled' ? notionRes.value : { tasks: [] }
+
+      const githubOutcomes: Outcome[] = (outcomesData.outcomes || []).map((o: Outcome) => ({
+        ...o,
+        source: 'github' as const,
+      }))
+      setSha(outcomesData.sha || '')
+
+      // Convert Notion unchecked tasks to pending outcomes
+      const notionOutcomes: Outcome[] = (notionData.tasks || [])
+        .filter((t: NotionTask) => !t.checked)
+        .map((t: NotionTask) => ({
+          id: `notion-${t.id}`,
+          agent: 'Notion Build Queue',
+          action: t.title,
+          status: 'pending_approval',
+          created_at: new Date().toISOString(),
+          source: 'notion' as const,
+          notionBlockId: t.id,
+        }))
+
+      const all = [...githubOutcomes, ...notionOutcomes].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      setOutcomes(all)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -43,24 +86,37 @@ export default function ApprovalsPage() {
   async function decide(id: string, decision: 'approve' | 'reject') {
     setProcessing(id)
     try {
-      // Trigger GitHub Actions workflow
       const outcome = outcomes.find(o => o.id === id)
-      if (outcome?.token) {
-        await fetch(`/api/approve?token=${outcome.token}&action=${decision}`)
+
+      if (outcome?.source === 'notion' && outcome.notionBlockId) {
+        // Mark Notion task as checked when approved
+        if (decision === 'approve') {
+          await fetch(`/api/notion-queue`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blockId: outcome.notionBlockId, checked: true }),
+          }).catch(() => {})
+        }
+      } else {
+        // GitHub outcomes — trigger workflow if token present
+        if (outcome?.token) {
+          await fetch(`/api/approve?token=${outcome.token}&action=${decision}`).catch(() => {})
+        }
+        const updated = outcomes
+          .filter(o => o.source !== 'notion')
+          .map(o => o.id === id ? { ...o, status: decision === 'approve' ? 'approved' : 'rejected' } : o)
+        if (sha) {
+          await fetch('/api/outcomes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ outcomes: updated.map(o => { const { source, ...rest } = o; return rest }), sha }),
+          }).catch(() => {})
+        }
       }
-      // Update local state
-      const updated = outcomes.map(o =>
+
+      setOutcomes(prev => prev.map(o =>
         o.id === id ? { ...o, status: decision === 'approve' ? 'approved' : 'rejected' } : o
-      )
-      setOutcomes(updated)
-      // Write back to GitHub
-      if (sha) {
-        await fetch('/api/outcomes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ outcomes: updated, sha }),
-        })
-      }
+      ))
     } catch (e) {
       setError(String(e))
     } finally {
@@ -71,8 +127,8 @@ export default function ApprovalsPage() {
   return (
     <div className="p-8 max-w-4xl">
       <PageHeader
-        title="✅ Approvals"
-        subtitle="Agent actions awaiting your approval"
+        title="Approvals"
+        subtitle="Agent actions and Notion build tasks awaiting your approval"
         badge={{ label: `${pending.length} pending`, ok: pending.length === 0 }}
       />
 
@@ -94,18 +150,23 @@ export default function ApprovalsPage() {
             {pending.length === 0 ? (
               <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 text-center">
                 <div className="text-2xl mb-2">✅</div>
-                <div className="text-[13px] text-[#64748B]">No pending approvals</div>
+                <div className="text-[13px] text-[#64748B]">All clear — nothing pending</div>
               </div>
             ) : (
               <div className="space-y-3">
                 {pending.map(o => (
-                  <div key={o.id} className="bg-[#1C1C1C] border border-[#F59E0B]/30 rounded-xl p-5">
+                  <div key={o.id} className={`bg-[#1C1C1C] rounded-xl p-5 border ${
+                    o.source === 'notion' ? 'border-[#6366F1]/30' : 'border-[#F59E0B]/30'
+                  }`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold text-[#F59E0B] uppercase tracking-wide">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className={`text-[11px] font-bold uppercase tracking-wide ${
+                            o.source === 'notion' ? 'text-[#A5B4FC]' : 'text-[#F59E0B]'
+                          }`}>
                             {o.agent}
                           </span>
+                          {o.source === 'notion' && <NotionBadge />}
                           <span className="text-[10px] text-[#475569]">
                             {new Date(o.created_at).toLocaleString()}
                           </span>
@@ -149,21 +210,20 @@ export default function ApprovalsPage() {
               <div className="space-y-2">
                 {history.map(o => (
                   <div key={o.id} className="bg-[#161616] border border-white/[0.05] rounded-lg px-4 py-3 flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-semibold text-[#94A3B8]">{o.agent}</span>
-                      <span className="text-[11px] text-[#475569] mx-2">·</span>
-                      <span className="text-[12px] text-[#F1F5F9]">{o.action}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] shrink-0">{o.agent}</span>
+                      {o.source === 'notion' && <NotionBadge />}
+                      <span className="text-[11px] text-[#475569] mx-1">·</span>
+                      <span className="text-[12px] text-[#F1F5F9] truncate">{o.action}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] text-[#475569]">
                         {new Date(o.created_at).toLocaleDateString()}
                       </span>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        o.status === 'approved'
-                          ? 'text-[#22C55E] bg-[#22C55E]/10'
-                          : o.status === 'rejected'
-                          ? 'text-[#EF4444] bg-[#EF4444]/10'
-                          : 'text-[#F59E0B] bg-[#F59E0B]/10'
+                        o.status === 'approved' ? 'text-[#22C55E] bg-[#22C55E]/10'
+                        : o.status === 'rejected' ? 'text-[#EF4444] bg-[#EF4444]/10'
+                        : 'text-[#F59E0B] bg-[#F59E0B]/10'
                       }`}>
                         {o.status}
                       </span>
@@ -177,10 +237,7 @@ export default function ApprovalsPage() {
       )}
 
       <div className="mt-6">
-        <button
-          onClick={load}
-          className="text-[12px] text-[#14B8A6] hover:text-[#0D9488] transition-colors"
-        >
+        <button onClick={load} className="text-[12px] text-[#14B8A6] hover:text-[#0D9488] transition-colors">
           ↺ Refresh
         </button>
       </div>

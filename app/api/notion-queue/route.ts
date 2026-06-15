@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY || "";
 const BUILD_QUEUE_PAGE_ID = "37da0eb7-e3ea-819e-af5b-e76db92a7c8c";
@@ -46,5 +46,28 @@ export async function GET() {
     return NextResponse.json({ tasks, total: tasks.length });
   } catch (e) {
     return NextResponse.json({ tasks: [], error: String(e) });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 })
+  try {
+    const { blockId, checked } = await req.json() as { blockId: string; checked: boolean }
+    const res = await fetch(`https://api.notion.com/v1/blocks/${blockId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to_do: { checked } }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      return NextResponse.json({ error: err.message }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
