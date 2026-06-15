@@ -1,0 +1,62 @@
+name: Deploy Notification
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    name: Notify dashboard of deploy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if package.json version changed
+        id: version_check
+        run: |
+          PREV=$(git show HEAD~1:package.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('version','0'))" 2>/dev/null || echo "0")
+          CURR=$(python3 -c "import json; d=json.load(open('package.json')); print(d.get('version','0'))")
+          echo "prev=$PREV" >> $GITHUB_OUTPUT
+          echo "curr=$CURR" >> $GITHUB_OUTPUT
+          if [ "$PREV" != "$CURR" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add Notion deploy notification
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          TASK_TEXT="✅ Web deployed [$COMMIT_SHA]: $COMMIT_MSG — $TIMESTAMP — desktop auto-updates on next launch"
+
+          curl -s -X PATCH "https://api.notion.com/v1/blocks/37da0eb7-e3ea-819e-af5b-e76db92a7c8c/children" \
+            -H "Authorization: Bearer $NOTION_API_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Notion-Version: 2022-06-28" \
+            -d "{\"children\":[{\"object\":\"block\",\"type\":\"to_do\",\"to_do\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"$TASK_TEXT\"}}],\"checked\":true}}]}"
+
+      - name: Trigger Electron rebuild (version bump only)
+        if: steps.version_check.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Package version changed from ${{ steps.version_check.outputs.prev }} to ${{ steps.version_check.outputs.curr }}"
+          echo "Triggering Electron rebuild in irishpeptides-desktop..."
+
+          curl -s -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/keithyob26/irishpeptides-desktop/actions/workflows/rebuild-electron.yml/dispatches" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"version\":\"${{ steps.version_check.outputs.curr }}\",\"triggered_by\":\"irishpeptides-web version bump\"}}"
+
+          echo "Electron rebuild triggered for v${{ steps.version_check.outputs.curr }}"
