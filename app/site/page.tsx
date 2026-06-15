@@ -11,6 +11,12 @@ interface Commit {
   url: string
 }
 
+interface DeployInfo {
+  lastDeploy: { sha: string; message: string; date: string; url: string } | null
+  lastQA: { status: string; conclusion: string | null; date: string; url: string } | null
+  autoDeployEnabled: boolean
+}
+
 const PAGES = [
   { path: '/', title: 'Home' }, { path: '/about.html', title: 'About' },
   { path: '/coaching', title: 'Coaching' }, { path: '/blog', title: 'Blog' },
@@ -19,15 +25,18 @@ const PAGES = [
 ]
 
 const TASK_BUTTONS = [
-  { id: 'qa', label: 'Run QA Tests', description: 'Playwright smoke tests on irishpeptides.ie', workflow: 'site_qa.yml' },
-  { id: 'seo', label: 'SEO Audit', description: 'Run SEO agent — keyword gaps + technical', workflow: 'seo_agent.yml' },
-  { id: 'content', label: 'Content Agent', description: 'Generate weekly content plan', workflow: 'content_studio.yml' },
-  { id: 'compliance', label: 'Plan Compliance', description: 'Check context docs against codebase', workflow: 'plan_compliance.yml' },
+  { id: 'qa', label: 'Run QA Tests', description: 'Playwright smoke tests on irishpeptides.ie', workflow: 'site-qa.yml' },
+  { id: 'seo', label: 'SEO Audit', description: 'Run SEO agent — keyword gaps + technical', workflow: 'seo-loop.yml' },
+  { id: 'content', label: 'Content Engine', description: 'Generate content plan', workflow: 'content-engine.yml' },
+  { id: 'compliance', label: 'Plan Compliance', description: 'Check context docs against codebase', workflow: 'plan-compliance.yml' },
+  { id: 'health', label: 'System Health', description: 'Full system health check', workflow: 'system-health.yml' },
+  { id: 'optimiser', label: 'Site Optimiser', description: 'On-page SEO + performance audit', workflow: 'site-optimiser.yml' },
 ]
 
 export default function SitePage() {
   const [siteCommits, setSiteCommits] = useState<Commit[]>([])
   const [jarvisCommits, setJarvisCommits] = useState<Commit[]>([])
+  const [deployInfo, setDeployInfo] = useState<DeployInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [deploying, setDeploying] = useState(false)
   const [deployResult, setDeployResult] = useState<{ ok?: boolean; sha?: string; error?: string } | null>(null)
@@ -37,10 +46,17 @@ export default function SitePage() {
   async function load() {
     setLoading(true)
     try {
-      const r = await fetch('/api/site-status')
-      const d = await r.json()
-      setSiteCommits(d.siteCommits || [])
-      setJarvisCommits(d.jarvisCommits || [])
+      const [statusRes, deployRes] = await Promise.allSettled([
+        fetch('/api/site-status').then(r => r.json()),
+        fetch('/api/workflow-dispatch').then(r => r.json()),
+      ])
+      if (statusRes.status === 'fulfilled') {
+        setSiteCommits(statusRes.value.siteCommits || [])
+        setJarvisCommits(statusRes.value.jarvisCommits || [])
+      }
+      if (deployRes.status === 'fulfilled') {
+        setDeployInfo(deployRes.value)
+      }
     } catch {}
     finally { setLoading(false) }
   }
@@ -69,23 +85,16 @@ export default function SitePage() {
   const runWorkflow = async (task: typeof TASK_BUTTONS[0]) => {
     setRunningTask(task.id)
     try {
-      const r = await fetch(
-        `https://api.github.com/repos/keithyob26/irishpeptides-jarvis/actions/workflows/${task.workflow}/dispatches`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `token ${process.env.NEXT_PUBLIC_GITHUB_TOKEN || ''}`,
-            Accept: 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ref: 'master' }),
-        }
-      )
-      // GitHub returns 204 No Content on success
-      if (r.status === 204) {
+      const r = await fetch('/api/workflow-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow: task.workflow }),
+      })
+      const d = await r.json()
+      if (d.ok) {
         setTaskResults(prev => ({ ...prev, [task.id]: { ok: true, msg: 'Triggered — check GitHub Actions' } }))
       } else {
-        setTaskResults(prev => ({ ...prev, [task.id]: { ok: false, msg: `HTTP ${r.status}` } }))
+        setTaskResults(prev => ({ ...prev, [task.id]: { ok: false, msg: d.error || `HTTP ${d.status}` } }))
       }
     } catch (e) {
       setTaskResults(prev => ({ ...prev, [task.id]: { ok: false, msg: String(e) } }))
@@ -94,19 +103,67 @@ export default function SitePage() {
     }
   }
 
+  const qaOk = deployInfo?.lastQA?.conclusion === 'success'
+  const qaFail = deployInfo?.lastQA?.conclusion === 'failure'
+
   return (
     <div className="p-8 max-w-5xl">
       <PageHeader title="Site Control"
         subtitle="irishpeptides.ie · keithyob26/irishpeptides-website"
         badge={{ label: 'GitHub connected', ok: true }} />
 
+      {/* Deploy status bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-4">
+          <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Last Deploy</div>
+          {deployInfo?.lastDeploy ? (
+            <>
+              <div className="text-[12px] text-[#F1F5F9] font-semibold truncate">{deployInfo.lastDeploy.message.split('\n')[0].slice(0, 50)}</div>
+              <div className="text-[11px] text-[#64748B] mt-0.5">{new Date(deployInfo.lastDeploy.date).toLocaleString()}</div>
+              <a href={deployInfo.lastDeploy.url} target="_blank" rel="noreferrer"
+                className="text-[10px] text-[#14B8A6] hover:underline">commit {deployInfo.lastDeploy.sha}</a>
+            </>
+          ) : (
+            <div className="text-[12px] text-[#64748B]">{loading ? 'Loading…' : '—'}</div>
+          )}
+        </div>
+
+        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-4">
+          <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Auto Deploy</div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+            <span className="text-[12px] text-[#22C55E] font-semibold">ON</span>
+          </div>
+          <div className="text-[11px] text-[#64748B] mt-1">Cloudflare Pages auto-deploys on every commit to irishpeptides-website</div>
+        </div>
+
+        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-4">
+          <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Last QA Run</div>
+          {deployInfo?.lastQA ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${qaOk ? 'bg-[#22C55E]' : qaFail ? 'bg-[#EF4444]' : 'bg-[#F59E0B]'}`} />
+                <span className={`text-[12px] font-semibold ${qaOk ? 'text-[#22C55E]' : qaFail ? 'text-[#EF4444]' : 'text-[#F59E0B]'}`}>
+                  {qaOk ? 'Pass' : qaFail ? 'Fail' : deployInfo.lastQA.conclusion || deployInfo.lastQA.status}
+                </span>
+              </div>
+              <div className="text-[11px] text-[#64748B] mt-0.5">{new Date(deployInfo.lastQA.date).toLocaleString()}</div>
+              <a href={deployInfo.lastQA.url} target="_blank" rel="noreferrer"
+                className="text-[10px] text-[#14B8A6] hover:underline">View run →</a>
+            </>
+          ) : (
+            <div className="text-[12px] text-[#64748B]">{loading ? 'Loading…' : 'No QA runs found'}</div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Deploy */}
+        {/* Deploy button */}
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
           <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">Deploy</div>
           <p className="text-[12px] text-[#64748B] mb-4">
-            Triggers a deploy commit to <code className="text-[#14B8A6]">keithyob26/irishpeptides-website</code>.
-            Cloudflare Pages auto-deploys on each commit.
+            Commits a deploy trigger to <code className="text-[#14B8A6]">keithyob26/irishpeptides-website</code>.
+            Cloudflare Pages auto-deploys on every commit.
           </p>
           <button onClick={deploy} disabled={deploying}
             className="w-full py-2.5 rounded-lg text-[13px] font-semibold text-[#0A0F1E] disabled:opacity-60 transition-opacity"
@@ -118,9 +175,7 @@ export default function SitePage() {
               deployResult.ok ? 'bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20'
               : 'bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/20'
             }`}>
-              {deployResult.ok
-                ? `✓ Deployed — commit ${deployResult.sha}`
-                : `✗ ${deployResult.error}`}
+              {deployResult.ok ? `✓ Deployed — commit ${deployResult.sha}` : `✗ ${deployResult.error}`}
             </div>
           )}
         </div>
@@ -148,15 +203,16 @@ export default function SitePage() {
 
       {/* Task Runner */}
       <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 mb-6">
-        <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-4">Task Runner</div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-1">Task Runner</div>
+        <p className="text-[11px] text-[#475569] mb-4">Triggers GitHub Actions workflows server-side (token never exposed to browser).</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {TASK_BUTTONS.map(t => {
             const result = taskResults[t.id]
             return (
               <div key={t.id} className="border border-white/[0.05] rounded-lg p-4">
                 <div className="text-[12px] font-semibold text-[#F1F5F9] mb-0.5">{t.label}</div>
                 <div className="text-[11px] text-[#64748B] mb-3">{t.description}</div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={() => runWorkflow(t)} disabled={runningTask === t.id}
                     className="px-4 py-1.5 text-[11px] font-semibold rounded-lg border border-[#14B8A6]/30 text-[#14B8A6] hover:bg-[#14B8A6]/10 transition-all disabled:opacity-50">
                     {runningTask === t.id ? 'Triggering…' : '▶ Run'}
@@ -174,9 +230,6 @@ export default function SitePage() {
             )
           })}
         </div>
-        <p className="text-[11px] text-[#475569] mt-3">
-          Note: GitHub Actions workflow dispatch requires a valid workflow_dispatch trigger in each .yml file.
-        </p>
       </div>
 
       {/* Commit Logs */}
