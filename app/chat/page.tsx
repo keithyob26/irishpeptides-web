@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import PageHeader from '@/components/PageHeader'
 
-interface Msg { role: 'user' | 'assistant'; content: string }
+interface Msg { role: 'user' | 'assistant'; content: string; sources?: string[] }
 
 interface Conversation {
   id: string
@@ -22,15 +22,15 @@ const MODELS: { key: ModelKey; label: string; note?: string }[] = [
 ]
 
 const STARTERS = [
+  'How many visitors did the site get this month?',
+  'How are my agents doing?',
   'How many subscribers do I have?',
   'What should I post about this week?',
-  'How did my site do yesterday?',
-  'How much have I made this month?',
 ]
 
 const INITIAL_MSG: Msg = {
   role: 'assistant',
-  content: "Good morning. I'm your Irish Peptides AI assistant. Ask me about site traffic, subscribers, content ideas, revenue, or anything about the business.",
+  content: "Good morning. I'm your Irish Peptides AI assistant. Ask me about site traffic, subscribers, content ideas, revenue, or anything about the business. I'll pull in live data automatically.",
 }
 
 function groupConversations(convs: Conversation[]) {
@@ -54,6 +54,20 @@ function groupConversations(convs: Conversation[]) {
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
+function SourceBadge({ sources }: { sources: string[] }) {
+  if (!sources.length) return null
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+      <span className="text-[9px] text-[#475569] uppercase tracking-wide">Live data:</span>
+      {sources.map(s => (
+        <span key={s} className="text-[9px] px-1.5 py-0.5 rounded bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/20 font-medium">
+          {s}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -61,6 +75,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [streaming, setStreaming] = useState('')
+  const [streamingSources, setStreamingSources] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [model, setModel] = useState<ModelKey>('gemini')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -96,13 +111,13 @@ export default function ChatPage() {
   }, [])
 
   const newChat = () => {
-    setActiveId(null); setMsgs([INITIAL_MSG]); setInput(''); setFiles([]); setStreaming('')
+    setActiveId(null); setMsgs([INITIAL_MSG]); setInput(''); setFiles([]); setStreaming(''); setStreamingSources([])
   }
 
   const loadConversation = (conv: Conversation) => {
     setActiveId(conv.id)
     setMsgs(conv.messages.length > 0 ? conv.messages : [INITIAL_MSG])
-    setInput(''); setFiles([]); setStreaming('')
+    setInput(''); setFiles([]); setStreaming(''); setStreamingSources([])
   }
 
   const deleteConversation = async (id: string, e: React.MouseEvent) => {
@@ -123,6 +138,7 @@ export default function ChatPage() {
     setMsgs(newMsgs)
     setLoading(true)
     setStreaming('')
+    setStreamingSources([])
     const filesToSend = [...files]
     setFiles([])
 
@@ -149,6 +165,7 @@ export default function ChatPage() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
+      let detectedSources: string[] = []
       let buf = ''
 
       while (true) {
@@ -163,7 +180,10 @@ export default function ChatPage() {
           if (raw === '[DONE]') continue
           try {
             const parsed = JSON.parse(raw)
-            if (parsed.text) {
+            if (parsed.sources) {
+              detectedSources = parsed.sources
+              setStreamingSources(parsed.sources)
+            } else if (parsed.text) {
               accumulated += parsed.text
               setStreaming(accumulated)
             }
@@ -171,9 +191,14 @@ export default function ChatPage() {
         }
       }
 
-      const finalMsgs: Msg[] = [...newMsgs, { role: 'assistant', content: accumulated || 'No response.' }]
+      const finalMsgs: Msg[] = [...newMsgs, {
+        role: 'assistant',
+        content: accumulated || 'No response.',
+        sources: detectedSources.length > 0 ? detectedSources : undefined,
+      }]
       setMsgs(finalMsgs)
       setStreaming('')
+      setStreamingSources([])
 
       const convId = activeId || uid()
       const title = message.slice(0, 60) + (message.length > 60 ? '…' : '')
@@ -236,7 +261,7 @@ export default function ChatPage() {
             className="text-[#64748B] hover:text-[#14B8A6] text-[18px] leading-none transition-colors shrink-0" title="Toggle history">
             ☰
           </button>
-          <PageHeader title="AI Chat" subtitle="Streaming · file uploads · conversation history"
+          <PageHeader title="AI Chat" subtitle="Streaming · live data · file uploads · conversation history"
             badge={{ label: model === 'gemini' ? 'Gemini' : model === 'deepseek' ? 'DeepSeek' : 'Claude', ok: true }} />
         </div>
 
@@ -254,6 +279,7 @@ export default function ChatPage() {
                 }`}>
                   {m.role === 'assistant' && <div className="text-[11px] text-[#14B8A6] font-semibold mb-1">Jarvis</div>}
                   <p className="text-[13px] text-[#E2E8F0] leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                  {m.role === 'assistant' && m.sources && <SourceBadge sources={m.sources} />}
                 </div>
               </div>
             ))}
@@ -264,15 +290,21 @@ export default function ChatPage() {
                 <div className="bg-[#161616] border border-white/[0.05] rounded-xl px-4 py-3 max-w-[78%]">
                   <div className="text-[11px] text-[#14B8A6] font-semibold mb-1">Jarvis</div>
                   {streaming ? (
-                    <p className="text-[13px] text-[#E2E8F0] leading-relaxed whitespace-pre-wrap">
-                      {streaming}<span className="animate-pulse">▋</span>
-                    </p>
+                    <>
+                      <p className="text-[13px] text-[#E2E8F0] leading-relaxed whitespace-pre-wrap">
+                        {streaming}<span className="animate-pulse">▋</span>
+                      </p>
+                      {streamingSources.length > 0 && <SourceBadge sources={streamingSources} />}
+                    </>
                   ) : (
                     <div className="flex gap-1 items-center h-5">
                       {[0, 1, 2].map(i => (
                         <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#14B8A6]"
                           style={{ animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
                       ))}
+                      {streamingSources.length > 0 && (
+                        <span className="text-[10px] text-[#475569] ml-2">fetching {streamingSources.join(', ')}…</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -336,7 +368,7 @@ export default function ChatPage() {
                 title="Attach image or PDF">📎</button>
               <input type="text" value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-                placeholder="Ask Jarvis anything…" disabled={loading}
+                placeholder="Ask Jarvis anything — live data injected automatically…" disabled={loading}
                 className="flex-1 bg-[#161616] border border-white/[0.07] rounded-lg px-4 py-3 text-[13px] text-[#F1F5F9] placeholder-[#475569] outline-none focus:border-[#14B8A6]/50 disabled:opacity-50" />
               <button onClick={() => send()} disabled={loading || (!input.trim() && files.length === 0)}
                 className="px-5 py-3 rounded-lg text-[13px] font-semibold text-[#0A0F1E] disabled:opacity-40 transition-opacity"
