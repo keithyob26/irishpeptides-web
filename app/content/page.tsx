@@ -36,9 +36,11 @@ const TYPE_COLORS: Record<string, string> = {
   blog:       'text-[#14B8A6] bg-[#14B8A6]/10 border-[#14B8A6]/25',
   blog_post:  'text-[#14B8A6] bg-[#14B8A6]/10 border-[#14B8A6]/25',
   social:     'text-[#A78BFA] bg-[#A78BFA]/10 border-[#A78BFA]/25',
+  social_post:'text-[#A78BFA] bg-[#A78BFA]/10 border-[#A78BFA]/25',
   instagram:  'text-[#A78BFA] bg-[#A78BFA]/10 border-[#A78BFA]/25',
   tiktok:     'text-[#F472B6] bg-[#F472B6]/10 border-[#F472B6]/25',
   newsletter: 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25',
+  tool_idea:  'text-[#38BDF8] bg-[#38BDF8]/10 border-[#38BDF8]/25',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -70,7 +72,37 @@ function detectType(o: Outcome): string {
 
 function typeLabel(t: string): string {
   if (t === 'blog_post') return 'Blog'
+  if (t === 'social_post') return 'Social'
+  if (t === 'tool_idea') return 'Tool Idea'
   return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+/** Convert u{1F1EE} JS-style Unicode escapes to actual emoji characters. */
+function decodeEmoji(text: string | undefined): string {
+  if (!text) return ''
+  return text.replace(/u\{([0-9A-Fa-f]+)\}/gi, (_, hex) => {
+    try { return String.fromCodePoint(parseInt(hex, 16)) } catch { return '' }
+  })
+}
+
+/** Image with fallback — shows filename badge when image 404s. */
+function ImagePreview({ src }: { src: string }) {
+  const [err, setErr] = useState(false)
+  if (!src) return null
+  if (err) return (
+    <div className="rounded-lg border border-white/[0.07] bg-[#1C2026] px-3 py-2 inline-flex items-center gap-2">
+      <span className="text-lg">🖼</span>
+      <span className="text-[10px] text-[#475569] truncate max-w-[240px]">{src.split('/').pop()}</span>
+      <a href={src} target="_blank" rel="noopener noreferrer"
+        className="text-[10px] text-[#14B8A6] hover:underline shrink-0">Open ↗</a>
+    </div>
+  )
+  return (
+    <img src={src} alt="Content preview"
+      className="rounded-lg max-h-48 w-auto object-cover border border-white/[0.07]"
+      onError={() => setErr(true)}
+    />
+  )
 }
 
 export default function ContentStudioPage() {
@@ -99,6 +131,7 @@ export default function ContentStudioPage() {
           || o.agent?.toLowerCase().includes('social')
           || o.agent?.toLowerCase().includes('newsletter')
           || o.agent?.toLowerCase().includes('blog')
+          || o.agent?.toLowerCase().includes('scraper')
       )
       setOutcomes(all)
     } catch (e) {
@@ -117,7 +150,7 @@ export default function ContentStudioPage() {
     filter === 'all' ? list : list.filter(o => {
       const t = detectType(o)
       if (filter === 'blog') return t === 'blog' || t === 'blog_post'
-      if (filter === 'social') return ['social', 'instagram', 'tiktok'].includes(t)
+      if (filter === 'social') return ['social', 'social_post', 'instagram', 'tiktok'].includes(t)
       return t === filter
     })
 
@@ -138,64 +171,51 @@ export default function ContentStudioPage() {
           title: o.title || o.action,
           slug: o.slug || o.action?.replace(/\s+/g, '-').toLowerCase().slice(0, 60),
           date: o.scheduled_date || new Date().toISOString().split('T')[0],
-          reason: reason || undefined,
+          sha,
+          outcomes,
+          reason: reason || '',
         }),
       })
-      const data = await res.json()
-      const msg = action === 'reject'
-        ? `Rejected${reason ? ' — agent will rewrite' : ''}`
-        : (data.status === 'published' ? 'Published ✓' : 'Approved (publish pending)')
-      setPublishResult(prev => ({ ...prev, [o.id]: msg }))
-      setOutcomes(prev => prev.map(item =>
-        item.id === o.id ? { ...item, status: data.status || (action === 'reject' ? 'rejected' : 'approved') } : item
-      ))
+      const result = await res.json()
+      setPublishResult(prev => ({
+        ...prev,
+        [o.id]: result.error ? `Error: ${result.error}` : (action === 'approve' ? '✓ Approved & published' : '✗ Rejected'),
+      }))
+      setTimeout(load, 1500)
     } catch (e) {
-      setPublishResult(prev => ({ ...prev, [o.id]: `Error: ${String(e).slice(0, 80)}` }))
+      setPublishResult(prev => ({ ...prev, [o.id]: `Error: ${String(e)}` }))
     } finally {
       setProcessing(null)
     }
   }
 
-  const pendingCount = pending.length
-
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="max-w-3xl mx-auto px-4 py-8">
       <PageHeader
         title="Content Studio"
-        subtitle="Blog · Instagram · TikTok · Newsletter · Approval flow"
-        badge={{ label: pendingCount > 0 ? `${pendingCount} pending` : 'All clear', ok: pendingCount === 0 }}
+        subtitle="Review and approve AI-generated content"
       />
 
-      {error && (
-        <div className="mb-4 text-[12px] text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-lg px-4 py-3">{error}</div>
-      )}
-
-      {/* Type filter */}
+      {/* Filter tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {(['all', 'blog', 'social', 'newsletter'] as ContentType[]).map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`text-[11px] px-3 py-1.5 rounded-full border transition-all capitalize ${
+            className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-all ${
               filter === f
-                ? 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
-                : 'border-white/[0.07] text-[#64748B] hover:text-[#F1F5F9]'
+                ? 'bg-[#14B8A6]/15 border-[#14B8A6]/40 text-[#14B8A6]'
+                : 'bg-white/[0.03] border-white/[0.07] text-[#64748B] hover:text-[#94A3B8]'
             }`}>
-            {f === 'all' ? `All (${outcomes.length})` : f}
+            {f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
-        <button onClick={load} className="ml-auto text-[11px] text-[#475569] hover:text-[#14B8A6] transition-colors">↺ Refresh</button>
       </div>
 
-      {loading ? (
-        <div className="text-[13px] text-[#64748B]">Loading content…</div>
-      ) : outcomes.length === 0 ? (
-        <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-8 text-center">
-          <div className="text-3xl mb-3">✍️</div>
-          <div className="text-[14px] font-semibold text-[#F1F5F9] mb-1">No content yet</div>
-          <div className="text-[12px] text-[#64748B]">Agents will push content here when generated. Run content_engine.py to generate.</div>
-        </div>
-      ) : (
+      {loading && <div className="text-[#475569] text-[13px]">Loading content…</div>}
+      {error  && <div className="text-[#EF4444] text-[12px]">Error: {error}</div>}
+
+      {!loading && !error && (
         <>
-          {/* Pending approval */}
+          {/* Pending */}
           {filtered(pending).length > 0 && (
             <div className="mb-8">
               <div className="text-[11px] font-semibold text-[#F59E0B] uppercase tracking-wide mb-3">
@@ -220,7 +240,9 @@ export default function ContentStudioPage() {
                             <span className="text-[10px] text-[#475569]">{o.agent}</span>
                             <span className="text-[10px] text-[#475569]">{new Date(o.created_at).toLocaleString()}</span>
                           </div>
-                          <div className="text-[14px] font-semibold text-[#F1F5F9] mb-1">{o.title || o.action}</div>
+                          <div className="text-[14px] font-semibold text-[#F1F5F9] mb-1">
+                            {decodeEmoji(o.title || o.action)}
+                          </div>
                         </div>
                         <button
                           onClick={() => setExpanded(isExpanded ? null : o.id)}
@@ -230,30 +252,27 @@ export default function ContentStudioPage() {
                         </button>
                       </div>
 
-                      {/* Content preview — always show a snippet */}
+                      {/* Content preview */}
                       {o.content && (
                         <div className={`px-5 pb-0 transition-all ${isExpanded ? '' : 'max-h-24 overflow-hidden'}`}>
                           <div className="text-[12px] text-[#94A3B8] bg-[#161616] rounded-lg p-4 whitespace-pre-wrap leading-relaxed">
-                            {o.content}
+                            {decodeEmoji(o.content)}
                           </div>
                         </div>
                       )}
 
-                      {/* Image preview */}
-                      {isExpanded && o.image_url && (
+                      {/* Image preview — always visible */}
+                      {o.image_url && (
                         <div className="px-5 pt-3">
-                          <img src={o.image_url} alt="Content preview"
-                            className="rounded-lg max-h-64 object-cover border border-white/[0.07]"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                          />
+                          <ImagePreview src={o.image_url} />
                         </div>
                       )}
 
-                      {/* Video link */}
-                      {isExpanded && o.video_url && (
+                      {/* Video link — always visible */}
+                      {o.video_url && (
                         <div className="px-5 pt-3">
                           <a href={o.video_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[12px] text-[#14B8A6] hover:underline">
+                            className="inline-flex items-center gap-1.5 text-[12px] bg-[#161616] border border-white/[0.07] rounded-lg px-3 py-2 text-[#14B8A6] hover:border-[#14B8A6]/40 transition-colors">
                             ▶ View video
                           </a>
                         </div>
@@ -320,10 +339,10 @@ export default function ContentStudioPage() {
                       {isExpanded && (o.channels?.length || o.hashtags?.length || o.skills_used?.length || o.model) && (
                         <div className="px-5 pb-4 space-y-2">
                           {o.model && <div className="flex items-center gap-2"><span className="text-[10px] text-[#475569] w-16">Model:</span><span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">{o.model}</span></div>}
-                          {o.channels?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Channels:</span>{o.channels.map(c=><span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/20">{c}</span>)}</div>}
-                          {o.hashtags?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Tags:</span><div className="text-[10px] text-[#94A3B8]">{o.hashtags.slice(0,8).join(' ')}</div></div>}
-                          {o.skills_used?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Skills:</span>{o.skills_used.map(s=><span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20">{s}</span>)}</div>}
-                          {o.keywords?.length && <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Keywords:</span><div className="text-[10px] text-[#94A3B8]">{o.keywords!.join(', ')}</div></div>}
+                          {o.channels?.length ? <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Channels:</span>{o.channels.map(c=><span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/20">{c}</span>)}</div> : null}
+                          {o.hashtags?.length ? <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Tags:</span><div className="text-[10px] text-[#94A3B8]">{o.hashtags.slice(0,8).map(h => `#${h}`).join(' ')}</div></div> : null}
+                          {o.skills_used?.length ? <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Skills:</span>{o.skills_used.map(s=><span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20">{s}</span>)}</div> : null}
+                          {o.keywords?.length ? <div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] text-[#475569] w-16">Keywords:</span><div className="text-[10px] text-[#94A3B8]">{o.keywords!.join(', ')}</div></div> : null}
                         </div>
                       )}
                     </div>
@@ -349,7 +368,9 @@ export default function ContentStudioPage() {
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${TYPE_COLORS[type] || TYPE_COLORS.social}`}>
                             {typeLabel(type).toUpperCase()}
                           </span>
-                          <span className="text-[12px] text-[#F1F5F9] truncate">{o.title || o.action}</span>
+                          <span className="text-[12px] text-[#F1F5F9] truncate">
+                            {decodeEmoji(o.title || o.action)}
+                          </span>
                           <span className="text-[11px] text-[#475569]">{o.agent}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -360,7 +381,9 @@ export default function ContentStudioPage() {
                         </div>
                       </div>
                       {o.content && (
-                        <div className="text-[11px] text-[#64748B] mt-1.5 truncate">{o.content.slice(0, 120)}</div>
+                        <div className="text-[11px] text-[#64748B] mt-1.5 truncate">
+                          {decodeEmoji(o.content.slice(0, 120))}
+                        </div>
                       )}
                     </div>
                   )
