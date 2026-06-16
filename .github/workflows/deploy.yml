@@ -3,11 +3,17 @@ name: Deploy to Vercel
 on:
   push:
     branches: [master, main]
+  repository_dispatch:
+    types: [deploy, contents-api-commit]
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     outputs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
@@ -16,6 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
@@ -24,8 +31,6 @@ jobs:
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
@@ -36,6 +41,8 @@ jobs:
   panel-check:
     needs: deploy
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
