@@ -129,23 +129,15 @@ async function fetchGA4Summary(): Promise<string> {
 
 async function fetchNotionQueueCount(notionKey: string): Promise<string> {
   try {
-    const r = await fetch(`${NOTION_API}/databases/37da0eb7-e3ea-819e-af5b-e76db92a7c8c/query`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${notionKey}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        filter: { property: 'Done', checkbox: { equals: false } },
-        page_size: 100,
-      }),
+    const r = await fetch(`${NOTION_API}/blocks/37da0eb7-e3ea-819e-af5b-e76db92a7c8c/children?page_size=100`, {
+      headers: { Authorization: `Bearer ${notionKey}`, 'Notion-Version': '2022-06-28' },
       signal: AbortSignal.timeout(6000),
     })
     if (!r.ok) return ''
     const d = await r.json()
-    const count = d.results?.length ?? 0
-    return `Notion Build Queue: ${count} open task(s) remaining.`
+    const open = (d.results || []).filter((b: { type: string; to_do?: { checked: boolean } }) => b.type === 'to_do' && !b.to_do?.checked).length
+    const done = (d.results || []).filter((b: { type: string; to_do?: { checked: boolean } }) => b.type === 'to_do' && b.to_do?.checked).length
+    return `Notion Build Queue: ${open} open task(s), ${done} completed.`
   } catch { return '' }
 }
 
