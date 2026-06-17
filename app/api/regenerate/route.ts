@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 const GITHUB_TOKEN  = process.env.GITHUB_TOKEN || ''
 const GEMINI_KEY    = process.env.GEMINI_API_KEY || ''
 const DEEPSEEK_KEY  = process.env.DEEPSEEK_API_KEY || ''
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || ''
 const OUTCOMES_REPO = 'keithyob26/irishpeptides-jarvis'
 const OUTCOMES_PATH = 'memory/outcomes.json'
 
@@ -49,27 +48,6 @@ async function callDeepSeek(content: string): Promise<string> {
   return data.choices?.[0]?.message?.content?.trim() || ''
 }
 
-async function callClaude(content: string): Promise<string> {
-  if (!ANTHROPIC_KEY) throw new Error('ANTHROPIC_API_KEY not configured')
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `Rewrite this social post keeping all product facts (name, price, protein stats). Return ONLY the post text:\n\n${content}` }],
-    }),
-    signal: AbortSignal.timeout(20000),
-  })
-  if (!res.ok) throw new Error(`Claude ${res.status}`)
-  const data = await res.json()
-  return data.content?.[0]?.text?.trim() || ''
-}
 
 export async function POST(req: NextRequest) {
   const { id, model } = await req.json() as { id: string; model: string }
@@ -91,10 +69,8 @@ export async function POST(req: NextRequest) {
   const originalContent = (target.content as string) || ''
   let newContent = ''
   try {
-    if (model === 'gemini') newContent = await callGemini(originalContent)
-    else if (model === 'deepseek') newContent = await callDeepSeek(originalContent)
-    else if (model === 'claude') newContent = await callClaude(originalContent)
-    else return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 })
+    if (model === 'deepseek') newContent = await callDeepSeek(originalContent)
+    else newContent = await callGemini(originalContent) // default + fallback for gemini
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 })
   }
@@ -122,3 +98,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, content: newContent, model })
 }
+
