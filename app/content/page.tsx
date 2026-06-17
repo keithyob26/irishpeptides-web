@@ -59,6 +59,14 @@ const STATUS_LABEL: Record<string, string> = {
   completed:        'Completed',
 }
 
+const AI_SYSTEM_COLORS: Record<string, string> = {
+  'Gemini':      'text-[#4285F4] bg-[#4285F4]/10 border-[#4285F4]/25',
+  'DeepSeek':    'text-[#06B6D4] bg-[#06B6D4]/10 border-[#06B6D4]/25',
+  'Claude':      'text-[#D97706] bg-[#D97706]/10 border-[#D97706]/25',
+  'ChatGPT':     'text-[#10A37F] bg-[#10A37F]/10 border-[#10A37F]/25',
+  'Google Flow': 'text-[#FBBC04] bg-[#FBBC04]/10 border-[#FBBC04]/25',
+}
+
 function detectType(o: Outcome): string {
   if (o.type) return o.type
   const action = o.action?.toLowerCase() || ''
@@ -70,6 +78,22 @@ function detectType(o: Outcome): string {
   return 'social'
 }
 
+function isSocialType(type: string): boolean {
+  return ['social', 'social_post', 'instagram', 'tiktok'].includes(type)
+}
+
+function detectAISystem(o: Outcome): string {
+  const model = (o.model || '').toLowerCase()
+  const skills = (o.skills_used || []).join(' ').toLowerCase()
+  if (model.includes('gemini') || skills.includes('gemini')) return 'Gemini'
+  if (model.includes('deepseek') || skills.includes('deepseek')) return 'DeepSeek'
+  if (model.includes('claude') || skills.includes('claude')) return 'Claude'
+  if (model.includes('gpt') || skills.includes('chatgpt') || skills.includes('openai')) return 'ChatGPT'
+  if (skills.includes('google-flow') || skills.includes('flow')) return 'Google Flow'
+  if (model) return model.split('-')[0].charAt(0).toUpperCase() + model.split('-')[0].slice(1)
+  return ''
+}
+
 function typeLabel(t: string): string {
   if (t === 'blog_post') return 'Blog'
   if (t === 'social_post') return 'Social'
@@ -77,7 +101,6 @@ function typeLabel(t: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-/** Convert u{1F1EE} JS-style Unicode escapes to actual emoji characters. */
 function decodeEmoji(text: string | undefined): string {
   if (!text) return ''
   return text.replace(/u\{([0-9A-Fa-f]+)\}/gi, (_, hex) => {
@@ -85,7 +108,6 @@ function decodeEmoji(text: string | undefined): string {
   })
 }
 
-/** Image with fallback — shows filename badge when image 404s. */
 function ImagePreview({ src }: { src: string }) {
   const [err, setErr] = useState(false)
   if (!src) return null
@@ -117,6 +139,11 @@ export default function ContentStudioPage() {
   const [error, setError] = useState('')
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [autoApprovedCount, setAutoApprovedCount] = useState(0)
+  const [showCreate, setShowCreate] = useState(false)
+  const [newPostContent, setNewPostContent] = useState('')
+  const [creatingPost, setCreatingPost] = useState(false)
+  const [createResult, setCreateResult] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -143,7 +170,79 @@ export default function ContentStudioPage() {
 
   useEffect(() => { load() }, [load])
 
-  const pending = outcomes.filter(o => o.status === 'pending_approval')
+  // Auto-approve non-social pending items (blogs, tools, SEO fixes go live immediately)
+  useEffect(() => {
+    if (loading) return
+    const toAutoApprove = outcomes.filter(o => {
+      if (o.status !== 'pending_approval') return false
+      return !isSocialType(detectType(o))
+    })
+    if (toAutoApprove.length === 0) return
+
+    let active = true
+    ;(async () => {
+      for (const o of toAutoApprove) {
+        if (!active) break
+        const type = detectType(o)
+        try {
+          await fetch('/api/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: o.id, action: 'approve', type,
+              content: o.content || '',
+              title: o.title || o.action,
+              slug: (o.slug || (o.action || '').replace(/\s+/g, '-').toLowerCase()).slice(0, 60),
+              date: o.scheduled_date || new Date().toISOString().split('T')[0],
+            }),
+          })
+        } catch {}
+      }
+      if (active) {
+        setAutoApprovedCount(c => c + toAutoApprove.length)
+        setTimeout(load, 1500)
+      }
+    })()
+    return () => { active = false }
+  }, [outcomes, loading, load])
+
+  async function handleCreatePost() {
+    if (!newPostContent.trim()) return
+    setCreatingPost(true)
+    setCreateResult('')
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `manual-${Date.now()}`,
+          action: 'approve',
+          type: 'social',
+          content: newPostContent,
+          title: newPostContent.slice(0, 60),
+          slug: 'manual-post',
+          date: new Date().toISOString().split('T')[0],
+        }),
+      })
+      const result = await res.json()
+      if (result.error) {
+        setCreateResult(`Error: ${result.error}`)
+      } else {
+        setCreateResult('✓ Queued via Buffer!')
+        setNewPostContent('')
+        setTimeout(() => { setShowCreate(false); setCreateResult(''); load() }, 2000)
+      }
+    } catch (e) {
+      setCreateResult(`Error: ${String(e)}`)
+    } finally {
+      setCreatingPost(false)
+    }
+  }
+
+  // Social/newsletter only in pending queue — blogs/tools/SEO auto-publish
+  const pending = outcomes.filter(o =>
+    o.status === 'pending_approval' && isSocialType(detectType(o))
+  )
   const history = outcomes.filter(o => o.status !== 'pending_approval')
 
   const filtered = (list: Outcome[]) =>
@@ -169,7 +268,7 @@ export default function ContentStudioPage() {
           type: detectType(o),
           content: o.content || '',
           title: o.title || o.action,
-          slug: o.slug || o.action?.replace(/\s+/g, '-').toLowerCase().slice(0, 60),
+          slug: o.slug || (o.action || '').replace(/\s+/g, '-').toLowerCase().slice(0, 60),
           date: o.scheduled_date || new Date().toISOString().split('T')[0],
           sha,
           outcomes,
@@ -193,21 +292,34 @@ export default function ContentStudioPage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       <PageHeader
         title="Content Studio"
-        subtitle="Review and approve AI-generated content"
+        subtitle="Social posts need approval — blogs, tools, SEO auto-publish"
       />
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {(['all', 'blog', 'social', 'newsletter'] as ContentType[]).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-all ${
-              filter === f
-                ? 'bg-[#14B8A6]/15 border-[#14B8A6]/40 text-[#14B8A6]'
-                : 'bg-white/[0.03] border-white/[0.07] text-[#64748B] hover:text-[#94A3B8]'
-            }`}>
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
+      {/* Auto-approve banner */}
+      {autoApprovedCount > 0 && (
+        <div className="mb-4 px-4 py-3 bg-[#22C55E]/5 border border-[#22C55E]/20 rounded-xl text-[12px] text-[#22C55E]">
+          ✓ {autoApprovedCount} blog/tool/SEO item{autoApprovedCount > 1 ? 's' : ''} auto-published — no approval needed
+        </div>
+      )}
+
+      {/* Filter tabs + New Post button */}
+      <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {(['all', 'blog', 'social', 'newsletter'] as ContentType[]).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-all ${
+                filter === f
+                  ? 'bg-[#14B8A6]/15 border-[#14B8A6]/40 text-[#14B8A6]'
+                  : 'bg-white/[0.03] border-white/[0.07] text-[#64748B] hover:text-[#94A3B8]'
+              }`}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="px-4 py-1.5 text-[12px] font-semibold rounded-lg bg-[#A78BFA]/10 border border-[#A78BFA]/30 text-[#A78BFA] hover:bg-[#A78BFA]/20 transition-all">
+          + New Post
+        </button>
       </div>
 
       {loading && <div className="text-[#475569] text-[13px]">Loading content…</div>}
@@ -215,19 +327,19 @@ export default function ContentStudioPage() {
 
       {!loading && !error && (
         <>
-          {/* Pending */}
+          {/* Pending — social/newsletter only */}
           {filtered(pending).length > 0 && (
             <div className="mb-8">
               <div className="text-[11px] font-semibold text-[#F59E0B] uppercase tracking-wide mb-3">
-                Pending Approval ({filtered(pending).length})
+                Pending Approval ({filtered(pending).length}) — Social Posts
               </div>
               <div className="space-y-4">
                 {filtered(pending).map(o => {
                   const type = detectType(o)
+                  const aiSystem = detectAISystem(o)
                   const isExpanded = expanded === o.id
                   return (
                     <div key={o.id} className="bg-[#1C1C1C] border border-[#F59E0B]/30 rounded-xl overflow-hidden">
-                      {/* Header */}
                       <div className="flex items-start justify-between gap-4 p-5">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -237,6 +349,11 @@ export default function ContentStudioPage() {
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_COLORS[o.status]}`}>
                               {STATUS_LABEL[o.status] || o.status}
                             </span>
+                            {aiSystem && (
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${AI_SYSTEM_COLORS[aiSystem] || 'text-[#64748B] bg-white/[0.04] border-white/[0.07]'}`}>
+                                {aiSystem}
+                              </span>
+                            )}
                             <span className="text-[10px] text-[#475569]">{o.agent}</span>
                             <span className="text-[10px] text-[#475569]">{new Date(o.created_at).toLocaleString()}</span>
                           </div>
@@ -252,7 +369,6 @@ export default function ContentStudioPage() {
                         </button>
                       </div>
 
-                      {/* Content preview */}
                       {o.content && (
                         <div className={`px-5 pb-0 transition-all ${isExpanded ? '' : 'max-h-24 overflow-hidden'}`}>
                           <div className="text-[12px] text-[#94A3B8] bg-[#161616] rounded-lg p-4 whitespace-pre-wrap leading-relaxed">
@@ -261,14 +377,12 @@ export default function ContentStudioPage() {
                         </div>
                       )}
 
-                      {/* Image preview — always visible */}
                       {o.image_url && (
                         <div className="px-5 pt-3">
                           <ImagePreview src={o.image_url} />
                         </div>
                       )}
 
-                      {/* Video link — always visible */}
                       {o.video_url && (
                         <div className="px-5 pt-3">
                           <a href={o.video_url} target="_blank" rel="noopener noreferrer"
@@ -278,7 +392,6 @@ export default function ContentStudioPage() {
                         </div>
                       )}
 
-                      {/* Action buttons */}
                       <div className="flex items-center justify-between gap-3 p-5 pt-4">
                         <div className="text-[11px]">
                           {publishResult[o.id] && (
@@ -286,9 +399,7 @@ export default function ContentStudioPage() {
                               {publishResult[o.id]}
                             </span>
                           )}
-                          {type === 'blog' || type === 'blog_post' ? (
-                            <span className="text-[#475569]">→ GitHub commit to irishpeptides-website</span>
-                          ) : type === 'newsletter' ? (
+                          {type === 'newsletter' ? (
                             <span className="text-[#475569]">→ Send via Resend</span>
                           ) : (
                             <span className="text-[#475569]">→ Schedule via Buffer</span>
@@ -312,7 +423,6 @@ export default function ContentStudioPage() {
                         </div>
                       </div>
 
-                      {/* Reject reason */}
                       {rejectingId === o.id && (
                         <div className="px-5 pb-4">
                           <div className="bg-[#EF4444]/5 border border-[#EF4444]/20 rounded-lg p-3">
@@ -335,7 +445,6 @@ export default function ContentStudioPage() {
                         </div>
                       )}
 
-                      {/* Metadata */}
                       {isExpanded && (o.channels?.length || o.hashtags?.length || o.skills_used?.length || o.model) && (
                         <div className="px-5 pb-4 space-y-2">
                           {o.model && <div className="flex items-center gap-2"><span className="text-[10px] text-[#475569] w-16">Model:</span><span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">{o.model}</span></div>}
@@ -361,6 +470,7 @@ export default function ContentStudioPage() {
               <div className="space-y-2">
                 {filtered(history).map(o => {
                   const type = detectType(o)
+                  const aiSystem = detectAISystem(o)
                   return (
                     <div key={o.id} className="bg-[#161616] border border-white/[0.05] rounded-lg px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
@@ -368,6 +478,11 @@ export default function ContentStudioPage() {
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${TYPE_COLORS[type] || TYPE_COLORS.social}`}>
                             {typeLabel(type).toUpperCase()}
                           </span>
+                          {aiSystem && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${AI_SYSTEM_COLORS[aiSystem] || 'text-[#64748B] bg-white/[0.04] border-white/[0.07]'}`}>
+                              {aiSystem.toUpperCase()}
+                            </span>
+                          )}
                           <span className="text-[12px] text-[#F1F5F9] truncate">
                             {decodeEmoji(o.title || o.action)}
                           </span>
@@ -394,7 +509,6 @@ export default function ContentStudioPage() {
         </>
       )}
 
-      {/* Navigate to calendar */}
       <div className="mt-8 flex items-center gap-4">
         <button onClick={() => router.push('/calendar')}
           className="text-[12px] text-[#14B8A6] hover:underline">
@@ -404,6 +518,38 @@ export default function ContentStudioPage() {
           ↺ Refresh
         </button>
       </div>
+
+      {/* New Post Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 w-full max-w-lg">
+            <div className="text-[14px] font-bold text-[#F1F5F9] mb-1">Create Social Post</div>
+            <div className="text-[11px] text-[#475569] mb-4">Publishes directly via Buffer — no approval queue</div>
+            <textarea
+              value={newPostContent}
+              onChange={e => setNewPostContent(e.target.value)}
+              placeholder="Write your post here… include hashtags at the end."
+              rows={5}
+              className="w-full bg-[#161616] border border-white/[0.07] rounded-lg px-4 py-3 text-[13px] text-[#F1F5F9] placeholder-[#475569] outline-none focus:border-[#14B8A6]/40 resize-none mb-4"
+            />
+            <div className="flex gap-3 justify-end items-center">
+              <span className="text-[11px] text-[#475569]">{newPostContent.length}/500</span>
+              <button onClick={() => { setShowCreate(false); setCreateResult('') }}
+                className="text-[12px] text-[#475569] hover:text-[#F1F5F9]">Cancel</button>
+              <button onClick={handleCreatePost}
+                disabled={!newPostContent.trim() || creatingPost}
+                className="px-5 py-2 text-[12px] font-semibold rounded-lg bg-[#14B8A6]/10 border border-[#14B8A6]/30 text-[#14B8A6] hover:bg-[#14B8A6]/20 disabled:opacity-40 transition-all">
+                {creatingPost ? '…Publishing' : '▶ Publish via Buffer'}
+              </button>
+            </div>
+            {createResult && (
+              <div className={`mt-3 text-[12px] ${createResult.includes('Error') ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
+                {createResult}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
