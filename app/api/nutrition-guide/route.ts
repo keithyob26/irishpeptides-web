@@ -58,11 +58,12 @@ Rules:
 - Add one practical tip per day
 - End with a note: "This plan is for educational purposes. Adjust based on your preferences and consult a dietitian for medical advice."
 
-Format as clean HTML with <h3> day headings, <ul> meal lists, <strong> for meal names. Keep it readable in an email.`;
+CRITICAL: Output ONLY raw HTML — no markdown, no \`\`\`html fences, no explanation text. Start directly with <h3>Day 1</h3>.
+Format: <h3> day headings, <ul> meal lists, <strong> for meal names. Readable in an email.`;
 
     try {
       const gr = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -70,8 +71,15 @@ Format as clean HTML with <h3> day headings, <ul> meal lists, <strong> for meal 
         }
       );
       const gd = await gr.json();
-      mealPlan = gd?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } catch { mealPlan = ""; }
+      let raw = gd?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      // Strip markdown code fences Gemini wraps around HTML
+      raw = raw.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+      mealPlan = raw;
+      if (!mealPlan) console.error("[nutrition-guide] Gemini returned empty:", JSON.stringify(gd).slice(0, 300));
+    } catch (e) {
+      console.error("[nutrition-guide] Gemini error:", e);
+      mealPlan = "";
+    }
   }
 
   // Fallback if Gemini fails
