@@ -67,6 +67,12 @@ const AI_SYSTEM_COLORS: Record<string, string> = {
   'Google Flow': 'text-[#FBBC04] bg-[#FBBC04]/10 border-[#FBBC04]/25',
 }
 
+const REGEN_MODEL_COLORS: Record<string, string> = {
+  gemini:   'bg-[#4285F4]/20 border-[#4285F4]/50 text-[#4285F4]',
+  deepseek: 'bg-[#06B6D4]/20 border-[#06B6D4]/50 text-[#06B6D4]',
+  claude:   'bg-[#D97706]/20 border-[#D97706]/50 text-[#D97706]',
+}
+
 function detectType(o: Outcome): string {
   if (o.type) return o.type
   const action = o.action?.toLowerCase() || ''
@@ -144,6 +150,9 @@ export default function ContentStudioPage() {
   const [newPostContent, setNewPostContent] = useState('')
   const [creatingPost, setCreatingPost] = useState(false)
   const [createResult, setCreateResult] = useState('')
+  const [regenModel, setRegenModel] = useState<Record<string, string>>({})
+  const [regenerating, setRegenerating] = useState<Record<string, boolean>>({})
+  const [regenResult, setRegenResult] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -236,6 +245,30 @@ export default function ContentStudioPage() {
       setCreateResult(`Error: ${String(e)}`)
     } finally {
       setCreatingPost(false)
+    }
+  }
+
+  async function handleRegenerate(o: Outcome) {
+    const model = regenModel[o.id] || 'gemini'
+    setRegenerating(prev => ({ ...prev, [o.id]: true }))
+    setRegenResult(prev => ({ ...prev, [o.id]: '' }))
+    try {
+      const res = await fetch('/api/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: o.id, model }),
+      })
+      const result = await res.json()
+      if (result.error) {
+        setRegenResult(prev => ({ ...prev, [o.id]: `Error: ${result.error}` }))
+      } else {
+        setRegenResult(prev => ({ ...prev, [o.id]: `✓ Rewritten with ${result.model}` }))
+        setTimeout(load, 1500)
+      }
+    } catch (e) {
+      setRegenResult(prev => ({ ...prev, [o.id]: `Error: ${String(e)}` }))
+    } finally {
+      setRegenerating(prev => ({ ...prev, [o.id]: false }))
     }
   }
 
@@ -338,6 +371,7 @@ export default function ContentStudioPage() {
                   const type = detectType(o)
                   const aiSystem = detectAISystem(o)
                   const isExpanded = expanded === o.id
+                  const selectedModel = regenModel[o.id] || 'gemini'
                   return (
                     <div key={o.id} className="bg-[#1C1C1C] border border-[#F59E0B]/30 rounded-xl overflow-hidden">
                       <div className="flex items-start justify-between gap-4 p-5">
@@ -441,6 +475,41 @@ export default function ContentStudioPage() {
                               </button>
                               <button onClick={() => setRejectingId(null)} className="text-[11px] text-[#475569] hover:text-[#F1F5F9]">Cancel</button>
                             </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI Regenerate toggle — visible when expanded */}
+                      {isExpanded && (
+                        <div className="px-5 pb-3">
+                          <div className="bg-[#161616] border border-white/[0.07] rounded-lg p-3">
+                            <div className="text-[11px] font-semibold text-[#94A3B8] mb-2">Regenerate with AI</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {(['gemini', 'deepseek', 'claude'] as const).map(m => (
+                                <button
+                                  key={m}
+                                  onClick={() => setRegenModel(prev => ({ ...prev, [o.id]: m }))}
+                                  className={`px-3 py-1 text-[10px] font-semibold rounded-full border transition-all ${
+                                    selectedModel === m
+                                      ? REGEN_MODEL_COLORS[m]
+                                      : 'bg-white/[0.03] border-white/[0.07] text-[#64748B] hover:text-[#94A3B8]'
+                                  }`}>
+                                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => handleRegenerate(o)}
+                                disabled={regenerating[o.id]}
+                                className="ml-auto px-4 py-1.5 text-[11px] font-semibold rounded-lg bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 disabled:opacity-40 transition-all"
+                              >
+                                {regenerating[o.id] ? '…Generating' : '↻ Regenerate'}
+                              </button>
+                            </div>
+                            {regenResult[o.id] && (
+                              <div className={`mt-2 text-[11px] ${regenResult[o.id].includes('Error') ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
+                                {regenResult[o.id]}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
