@@ -49,6 +49,7 @@ const AGENTS_RAW: AgentData[] = [
   { name: 'GA4 Monitor',       schedule: 'Daily 8am UTC',   status: 'scheduled',  desc: 'Pulls GA4 traffic, alerts on >20% drops, saves reports.',              file: 'agents/ga4_monitor.py',       model: 'Gemini → DeepSeek', color: '#14B8A6' },
   { name: 'SEO Loop',          schedule: 'Monday 8am UTC',  status: 'scheduled',  desc: 'GSC keyword gaps → optimisation tasks → content suggestions.',          file: 'agents/seo_loop.py',          model: 'Gemini → DeepSeek', color: '#06B6D4' },
   { name: 'Newsletter Agent',  schedule: 'Sunday 10am UTC', status: 'scheduled',  desc: 'Builds weekly email digest, sends via Resend to subscribers.',          file: 'agents/newsletter_agent.py',  model: 'Gemini → DeepSeek', color: '#10B981' },
+  { name: 'CEO Agent',         schedule: 'Sunday 9am UTC',  status: 'scheduled',  desc: 'Brand strategy, competitive positioning, growth priorities, weekly executive brief.', file: 'agents/ceo_agent.py', model: 'Gemini → DeepSeek', color: '#A855F7' },
   { name: 'CFO Agent',         schedule: 'Sunday 8am UTC',  status: 'scheduled',  desc: 'GA4 + Resend + Stripe metrics → revenue summary + recommendations.',    file: 'agents/cfo_agent.py',         model: 'Gemini → DeepSeek', color: '#F59E0B' },
   { name: 'Site Optimiser',    schedule: 'Sunday 9am UTC',  status: 'scheduled',  desc: 'GA4 conversion data → underperforming pages → improvement tasks.',      file: 'agents/site_optimiser.py',    model: 'Gemini → DeepSeek', color: '#EF4444' },
   { name: 'Competitor Monitor',schedule: 'Monday 9am UTC',  status: 'scheduled',  desc: 'Crawls top 3 Irish supplement competitors → content gap report.',       file: 'agents/competitor_monitor.py',model: 'Gemini → DeepSeek', color: '#F472B6' },
@@ -111,6 +112,7 @@ function buildGraph(agents: AgentData[], filter: string, search: string) {
   const edges: Edge[] = [
     { id: 'e1', source: 'Content Engine',    target: 'Legal Compliance', animated: true, style: { stroke: '#8B5CF655' } },
     { id: 'e2', source: 'Content Engine',    target: 'Protocol Guard',   animated: true, style: { stroke: '#8B5CF655' } },
+    { id: 'e0', source: 'CEO Agent',         target: 'CFO Agent',        style: { stroke: '#A855F744' } },
     { id: 'e3', source: 'GA4 Monitor',       target: 'CFO Agent',        style: { stroke: '#14B8A644' } },
     { id: 'e4', source: 'GA4 Monitor',       target: 'Site Optimiser',   style: { stroke: '#14B8A644' } },
     { id: 'e5', source: 'SEO Loop',          target: 'Content Engine',   style: { stroke: '#06B6D444' } },
