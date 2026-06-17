@@ -8,14 +8,16 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "",
     items: [
-      { href: "/",           icon: "⬡",  label: "Home"            },
-      { href: "/chat",       icon: "💬", label: "AI Chat"         },
+      { href: "/",              icon: "⬡",  label: "Home"            },
+      { href: "/manual-steps",  icon: "☑️", label: "Manual Steps"    },
+      { href: "/chat",          icon: "💬", label: "AI Chat"         },
     ],
   },
   {
     title: "Content",
     items: [
       { href: "/content",    icon: "✍️", label: "Content Studio"  },
+      { href: "/upload",     icon: "📸", label: "Upload Photo"    },
       { href: "/calendar",   icon: "📅", label: "Content Calendar"},
       { href: "/optimizer",  icon: "🔍", label: "Optimizer"       },
       { href: "/competitor", icon: "🎯", label: "Competitors"     },
