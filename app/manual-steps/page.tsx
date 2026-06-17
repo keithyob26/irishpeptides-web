@@ -493,9 +493,10 @@ export default function ManualStepsPage() {
   const [done, setDone] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Load done state from GitHub via API
+    setMounted(true);
     fetch("/api/manual-steps-done")
       .then((r) => r.json())
       .then((d) => {
@@ -658,7 +659,7 @@ export default function ManualStepsPage() {
           </p>
         </div>
 
-        {!loading && (
+        {!mounted ? null : !loading && (
           <>
             <Section label="Critical — Do First" steps={critical} color="#EF4444" />
             <Section label="High Priority" steps={high} color="#F59E0B" />
