@@ -20,7 +20,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/upload",     icon: "📸", label: "Upload Photo"    },
       { href: "/calendar",   icon: "📅", label: "Content Calendar"},
       { href: "/optimizer",  icon: "🔍", label: "Optimizer"       },
-      { href: "/competitor", icon: "🎯", label: "Competitors"     },
+      { href: "/competitor",          icon: "🎯", label: "Competitors"     },
+      { href: "/market-intelligence", icon: "📈", label: "Market Intel"    },
     ],
   },
   {

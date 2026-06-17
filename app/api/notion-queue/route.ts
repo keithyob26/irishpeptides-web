@@ -48,7 +48,7 @@ export async function GET() {
   }
 }
 
-// Create a new to_do task in the Build Queue
+// Add a to_do block to the Build Queue page
 export async function POST(req: NextRequest) {
   if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 });
   try {
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Update an existing block (check/uncheck)
+// Check/uncheck a to_do block
 export async function PATCH(req: NextRequest) {
   if (!NOTION_API_KEY) return NextResponse.json({ error: "NOTION_API_KEY not set" }, { status: 500 });
   try {

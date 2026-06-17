@@ -45,7 +45,7 @@ async function fetchSearchConsoleSummary(saJson: string): Promise<string> {
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
-    const r = await fetch(`${baseUrl}/api/search-console?days=28`, { signal: AbortSignal.timeout(12000) })
+    const r = await fetch(`${baseUrl}/api/search-console?days=28`, { signal: AbortSignal.timeout(6000) })
     if (!r.ok) return ''
     const d = await r.json()
     if (!d.connected || !d.summary) return ''
@@ -69,24 +69,19 @@ async function dispatchWorkflow(githubToken: string, workflow: string, inputs: R
   } catch (e) { return { ok: false, message: String(e) } }
 }
 
-async function addNotionTask(notionKey: string, title: string, details: string): Promise<{ ok: boolean; url?: string }> {
+async function addNotionTask(notionKey: string, title: string, _details: string): Promise<{ ok: boolean; url?: string }> {
   try {
-    const res = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
+    const text = `${title.slice(0, 200)}`
+    const res = await fetch('https://api.notion.com/v1/blocks/37da0eb7-e3ea-819e-af5b-e76db92a7c8c/children', {
+      method: 'PATCH',
       headers: { Authorization: `Bearer ${notionKey}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        parent: { database_id: '37da0eb7-e3ea-819e-af5b-e76db92a7c8c' },
-        properties: {
-          Name: { title: [{ text: { content: title.slice(0, 100) } }] },
-          Done: { checkbox: false },
-          Notes: { rich_text: [{ text: { content: details.slice(0, 1000) } }] },
-        },
+        children: [{ object: 'block', type: 'to_do', to_do: { rich_text: [{ type: 'text', text: { content: text } }], checked: false } }],
       }),
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return { ok: false }
-    const d = await res.json()
-    return { ok: true, url: d.url }
+    return { ok: true }
   } catch { return { ok: false } }
 }
 
@@ -121,7 +116,7 @@ async function fetchGA4Summary(): Promise<string> {
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
     const r = await fetch(`${baseUrl}/api/analytics?days=30`, {
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(6000),
     })
     if (!r.ok) return ''
     const d = await r.json()
@@ -558,117 +553,121 @@ async function streamClaude(systemCtx: string, contentParts: unknown[]): Promise
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
-  const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
+  try {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
+    const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
 
-  let message = ''
-  let model = 'claude'
-  const contentParts: unknown[] = []
+    let message = ''
+    let model = 'claude'
+    const contentParts: unknown[] = []
 
-  const contentType = req.headers.get('content-type') || ''
+    const contentType = req.headers.get('content-type') || ''
 
-  if (contentType.includes('multipart/form-data')) {
-    const form = await req.formData()
-    message = (form.get('message') as string) || ''
-    model = (form.get('model') as string) || 'claude'
-    const files = form.getAll('file') as File[]
-    for (const file of files) {
-      const bytes = await file.arrayBuffer()
-      const base64 = Buffer.from(bytes).toString('base64')
-      if (file.type.startsWith('image/')) {
-        contentParts.push({ type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } })
-      } else if (file.type === 'application/pdf') {
-        contentParts.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } })
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData()
+      message = (form.get('message') as string) || ''
+      model = (form.get('model') as string) || 'claude'
+      const files = form.getAll('file') as File[]
+      for (const file of files) {
+        const bytes = await file.arrayBuffer()
+        const base64 = Buffer.from(bytes).toString('base64')
+        if (file.type.startsWith('image/')) {
+          contentParts.push({ type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } })
+        } else if (file.type === 'application/pdf') {
+          contentParts.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } })
+        }
+      }
+    } else {
+      const body = await req.json() as { message?: string; model?: string }
+      message = body.message || ''
+      model = body.model || 'claude'
+    }
+
+    if (!message?.trim() && contentParts.length === 0) {
+      return NextResponse.json({ error: 'No message' }, { status: 400 })
+    }
+
+    // Build live context based on intent detection
+    const { context: liveContext, sources } = await buildLiveContext(message)
+
+    // Detect agent dispatch intents and take action
+    const intents = detectIntents(message)
+    const GH_TOKEN = process.env.GITHUB_TOKEN || ''
+    const NTN_KEY = process.env.NOTION_API_KEY || ''
+    let agentActionNote = ''
+
+    if (intents.has('triggerContent') && GH_TOKEN) {
+      const topic = message.replace(/write|create|generate|publish|draft|blog|post|about|a|an/gi, '').trim().slice(0, 100)
+      const notionResult = NTN_KEY ? await addNotionTask(NTN_KEY, `Content request: ${topic}`, `Requested via AI Chat on ${new Date().toUTCString()}. Auto-triggered content-engine.yml.`) : { ok: false }
+      const dispatchResult = await dispatchWorkflow(GH_TOKEN, 'content-engine.yml')
+      agentActionNote = `\n\n[ACTION TAKEN] Triggered Content Engine agent for "${topic}".${notionResult.ok ? ' Added to Notion Build Queue.' : ''} ${dispatchResult.message}.`
+      if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
+      if (notionResult.ok && !sources.includes('Notion')) sources.push('Notion')
+    } else if (intents.has('triggerAgent') && GH_TOKEN) {
+      const q = message.toLowerCase()
+      let workflow = 'system-health.yml'
+      if (q.includes('seo')) workflow = 'seo-loop.yml'
+      else if (q.includes('competitor')) workflow = 'competitor-monitor.yml'
+      else if (q.includes('content')) workflow = 'content-engine.yml'
+      const dispatchResult = await dispatchWorkflow(GH_TOKEN, workflow)
+      agentActionNote = `\n\n[ACTION TAKEN] Triggered ${workflow}. ${dispatchResult.message}.`
+      if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
+    }
+
+    const systemCtx = BRAND_CTX + liveContext + agentActionNote
+
+    contentParts.push({ type: 'text', text: message })
+
+    const enc = makeEncoder()
+
+    // Wrap the model stream to prepend a sources chunk
+    async function wrapWithSources(modelStream: Response): Promise<Response> {
+      if (!modelStream.body || sources.length === 0) return modelStream
+
+      const reader = modelStream.body.getReader()
+      const stream = new ReadableStream({
+        async start(controller) {
+          // Send sources metadata first
+          controller.enqueue(sourcesChunk(enc, sources))
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              controller.enqueue(value)
+            }
+          } finally {
+            controller.close()
+          }
+        },
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'X-Accel-Buffering': 'no',
+        },
+      })
+    }
+
+    // Match jarvis-web: check if Claude CLI exists before calling, fall back to Gemini if not
+    const claudeAvailable = (() => { try { return fs.existsSync(CLAUDE_CMD) } catch { return false } })()
+
+    let modelRes: Response
+    if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
+    else if (model === 'claude') {
+      if (claudeAvailable) {
+        modelRes = await streamClaude(systemCtx, contentParts)
+      } else {
+        // Claude CLI not available (cloud deploy) — fall back to Gemini silently
+        modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
       }
     }
-  } else {
-    const body = await req.json() as { message?: string; model?: string }
-    message = body.message || ''
-    model = body.model || 'claude'
+    else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
+    else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
+
+    return wrapWithSources(modelRes)
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-
-  if (!message?.trim() && contentParts.length === 0) {
-    return NextResponse.json({ error: 'No message' }, { status: 400 })
-  }
-
-  // Build live context based on intent detection
-  const { context: liveContext, sources } = await buildLiveContext(message)
-
-  // Detect agent dispatch intents and take action
-  const intents = detectIntents(message)
-  const GH_TOKEN = process.env.GITHUB_TOKEN || ''
-  const NTN_KEY = process.env.NOTION_API_KEY || ''
-  let agentActionNote = ''
-
-  if (intents.has('triggerContent') && GH_TOKEN) {
-    const topic = message.replace(/write|create|generate|publish|draft|blog|post|about|a|an/gi, '').trim().slice(0, 100)
-    const notionResult = NTN_KEY ? await addNotionTask(NTN_KEY, `Content request: ${topic}`, `Requested via AI Chat on ${new Date().toUTCString()}. Auto-triggered content-engine.yml.`) : { ok: false }
-    const dispatchResult = await dispatchWorkflow(GH_TOKEN, 'content-engine.yml')
-    agentActionNote = `\n\n[ACTION TAKEN] Triggered Content Engine agent for "${topic}".${notionResult.ok ? ' Added to Notion Build Queue.' : ''} ${dispatchResult.message}.`
-    if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
-    if (notionResult.ok && !sources.includes('Notion')) sources.push('Notion')
-  } else if (intents.has('triggerAgent') && GH_TOKEN) {
-    const q = message.toLowerCase()
-    let workflow = 'system-health.yml'
-    if (q.includes('seo')) workflow = 'seo-loop.yml'
-    else if (q.includes('competitor')) workflow = 'competitor-monitor.yml'
-    else if (q.includes('content')) workflow = 'content-engine.yml'
-    const dispatchResult = await dispatchWorkflow(GH_TOKEN, workflow)
-    agentActionNote = `\n\n[ACTION TAKEN] Triggered ${workflow}. ${dispatchResult.message}.`
-    if (!sources.includes('GitHub Actions')) sources.push('GitHub Actions')
-  }
-
-  const systemCtx = BRAND_CTX + liveContext + agentActionNote
-
-  contentParts.push({ type: 'text', text: message })
-
-  const enc = makeEncoder()
-
-  // Wrap the model stream to prepend a sources chunk
-  async function wrapWithSources(modelStream: Response): Promise<Response> {
-    if (!modelStream.body || sources.length === 0) return modelStream
-
-    const reader = modelStream.body.getReader()
-    const stream = new ReadableStream({
-      async start(controller) {
-        // Send sources metadata first
-        controller.enqueue(sourcesChunk(enc, sources))
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            controller.enqueue(value)
-          }
-        } finally {
-          controller.close()
-        }
-      },
-    })
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'X-Accel-Buffering': 'no',
-      },
-    })
-  }
-
-  // Match jarvis-web: check if Claude CLI exists before calling, fall back to Gemini if not
-  const claudeAvailable = (() => { try { return fs.existsSync(CLAUDE_CMD) } catch { return false } })()
-
-  let modelRes: Response
-  if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
-  else if (model === 'claude') {
-    if (claudeAvailable) {
-      modelRes = await streamClaude(systemCtx, contentParts)
-    } else {
-      // Claude CLI not available (cloud deploy) — fall back to Gemini silently
-      modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
-    }
-  }
-  else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
-  else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
-
-  return wrapWithSources(modelRes)
 }
