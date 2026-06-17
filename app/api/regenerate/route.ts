@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { spawnSync } from 'child_process'
+import fs from 'fs'
 
 const GITHUB_TOKEN  = process.env.GITHUB_TOKEN || ''
 const GEMINI_KEY    = process.env.GEMINI_API_KEY || ''
 const DEEPSEEK_KEY  = process.env.DEEPSEEK_API_KEY || ''
 const OUTCOMES_REPO = 'keithyob26/irishpeptides-jarvis'
 const OUTCOMES_PATH = 'memory/outcomes.json'
+const CLAUDE_CMD    = 'C:\\Users\\keith.obeirne\\AppData\\Roaming\\npm\\claude.cmd'
+const claudeAvailable = (() => { try { return fs.existsSync(CLAUDE_CMD) } catch { return false } })()
 
 const SYSTEM_PROMPT = `You are an Irish fitness and nutrition social media expert writing for Irish Peptides (irishpeptides.ie). Write compelling, authentic social posts targeting Irish gym-goers and fitness enthusiasts. Always include relevant hashtags ending with #IrishPeptides.`
+
+function callClaude(content: string): string {
+  const prompt = `${SYSTEM_PROMPT}\n\nRewrite this social post keeping all product facts (name, price, protein stats). Return ONLY the post text:\n\n${content}`
+  const result = spawnSync(CLAUDE_CMD, ['--dangerously-skip-permissions', '-p', prompt], {
+    encoding: 'utf-8',
+    timeout: 30000,
+    maxBuffer: 1024 * 1024,
+  })
+  if (result.error || result.status !== 0) throw new Error(result.stderr || 'Claude CLI error')
+  return result.stdout.trim()
+}
 
 async function callGemini(content: string): Promise<string> {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not configured')
@@ -48,12 +63,10 @@ async function callDeepSeek(content: string): Promise<string> {
   return data.choices?.[0]?.message?.content?.trim() || ''
 }
 
-
 export async function POST(req: NextRequest) {
   const { id, model } = await req.json() as { id: string; model: string }
   if (!id || !model) return NextResponse.json({ error: 'id and model required' }, { status: 400 })
 
-  // Fetch current outcomes.json
   if (!GITHUB_TOKEN) return NextResponse.json({ error: 'GITHUB_TOKEN not configured' }, { status: 500 })
   const getRes = await fetch(
     `https://api.github.com/repos/${OUTCOMES_REPO}/contents/${OUTCOMES_PATH}`,
@@ -68,18 +81,28 @@ export async function POST(req: NextRequest) {
 
   const originalContent = (target.content as string) || ''
   let newContent = ''
+  let usedModel = model
   try {
-    if (model === 'deepseek') newContent = await callDeepSeek(originalContent)
-    else newContent = await callGemini(originalContent) // default + fallback for gemini
+    if (model === 'claude') {
+      if (claudeAvailable) {
+        newContent = callClaude(originalContent)
+      } else {
+        newContent = await callGemini(originalContent)
+        usedModel = 'gemini'
+      }
+    } else if (model === 'deepseek') {
+      newContent = await callDeepSeek(originalContent)
+    } else {
+      newContent = await callGemini(originalContent)
+    }
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 })
   }
 
   if (!newContent) return NextResponse.json({ error: 'AI returned empty response' }, { status: 502 })
 
-  // Update outcomes.json
   const updated = outcomes.map((o) =>
-    o.id === id ? { ...o, content: newContent, model, regenerated_at: new Date().toISOString() } : o
+    o.id === id ? { ...o, content: newContent, model: usedModel, regenerated_at: new Date().toISOString() } : o
   )
   parsed.outcomes = updated
   const putRes = await fetch(
@@ -88,7 +111,7 @@ export async function POST(req: NextRequest) {
       method: 'PUT',
       headers: { Authorization: `token ${GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `feat: regenerate outcome ${id} with ${model}`,
+        message: `feat: regenerate outcome ${id} with ${usedModel}`,
         content: Buffer.from(JSON.stringify(parsed, null, 2)).toString('base64'),
         sha: fileData.sha,
       }),
@@ -96,6 +119,5 @@ export async function POST(req: NextRequest) {
   )
   if (!putRes.ok) return NextResponse.json({ error: 'Failed to save regenerated content' }, { status: 500 })
 
-  return NextResponse.json({ ok: true, content: newContent, model })
+  return NextResponse.json({ ok: true, content: newContent, model: usedModel })
 }
-
