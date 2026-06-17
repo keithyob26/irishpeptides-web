@@ -17,21 +17,6 @@ interface Step {
 const STEPS: Step[] = [
   // ── VERCEL KEYS ──────────────────────────────────────────────────────────────
   {
-    id: "anthropic_key",
-    title: "ANTHROPIC_API_KEY → Vercel",
-    category: "Vercel Keys",
-    blocks_what: "Claude AI Chat (streaming SSE + file upload)",
-    url: "https://console.anthropic.com/settings/keys",
-    done: false,
-    substeps: [
-      "Go to console.anthropic.com → Settings → API Keys",
-      "Create new key → copy it (shown once only)",
-      "Go to vercel.com/keithyob26/irishpeptides-web → Settings → Environment Variables",
-      "Add: ANTHROPIC_API_KEY = <paste key> → Production + Preview + Development",
-      "Redeploy: Deployments → top deploy → ⋯ → Redeploy",
-    ],
-  },
-  {
     id: "ga4_json",
     title: "GA4_SERVICE_ACCOUNT_JSON → Vercel",
     category: "Vercel Keys",
