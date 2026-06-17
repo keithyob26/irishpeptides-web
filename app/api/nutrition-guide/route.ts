@@ -136,14 +136,8 @@ Format as clean HTML with <h3> day headings, <ul> meal lists, <strong> for meal 
         }),
       });
 
-      // Add to audience
-      if (AUDIENCE_ID) {
-        await fetch(`https://api.resend.com/audiences/${AUDIENCE_ID}/contacts`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ email, first_name: name || "", unsubscribed: false }),
-        }).catch(() => {});
-      }
+      // NOTE: audience contact addition removed — Resend automation was sending
+      // a broken "Your Download" template email. Re-enable after fixing in Resend dashboard.
     } catch (e) {
       console.error("Resend error:", e);
       return NextResponse.json({ error: "Email send failed" }, { status: 500, headers: cors });
