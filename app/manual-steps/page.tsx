@@ -414,9 +414,41 @@ export default function ManualStepsPage() {
   const [steps, setSteps] = useState<Step[]>(STEPS);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [lastSync, setLastSync] = useState<string>("");
+  const [syncing, setSyncing] = useState(false);
 
-  function toggleDone(id: string) {
+  // Load persisted done state from GitHub via /api/complete-step
+  async function loadDoneState() {
+    try {
+      const r = await fetch('/api/complete-step', { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      const doneIds: string[] = data.done || [];
+      setSteps(prev => prev.map(s => ({ ...s, done: doneIds.includes(s.id) })));
+      setLastSync(new Date().toLocaleTimeString('en-IE'));
+    } catch { /* use local state */ }
+  }
+
+  useEffect(() => {
+    loadDoneState();
+    // Auto-refresh every 30s — picks up completions from Claude sessions
+    const t = setInterval(loadDoneState, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  async function toggleDone(id: string) {
+    // Optimistic update
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+    setSyncing(true);
+    try {
+      await fetch('/api/complete-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step_id: id }),
+      });
+      setLastSync(new Date().toLocaleTimeString('en-IE'));
+    } catch { /* optimistic update already applied */ }
+    setSyncing(false);
   }
 
   const filtered = steps.filter((s) => filter === "all" || s.category === filter);
@@ -433,8 +465,12 @@ export default function ManualStepsPage() {
           <h1 style={{ color: "#14B8A6", fontSize: "22px", fontWeight: 700, margin: "0 0 4px" }}>
             Manual Steps
           </h1>
-          <p style={{ color: "#64748B", fontSize: "13px", margin: "0 0 16px" }}>
-            Irish Peptides — {totalPending} steps remaining · Tap to expand, tap circle to mark done
+          <p style={{ color: "#64748B", fontSize: "13px", margin: "0 0 4px" }}>
+            Irish Peptides — {totalPending} steps remaining
+          </p>
+          <p style={{ color: "#334155", fontSize: "11px", margin: "0 0 16px" }}>
+            {syncing ? "Saving…" : lastSync ? `Synced ${lastSync} · auto-refreshes every 30s` : "Loading done state…"}
+            {" · "}Tap circle to mark done · Claude marks steps done automatically
           </p>
 
           {/* Category filter */}
