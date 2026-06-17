@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import PageHeader from '@/components/PageHeader'
 
-type MainTab = 'ga4' | 'search'
+type MainTab = 'ga4' | 'search' | 'social'
 
 interface SearchConsoleData {
   connected: boolean
@@ -128,7 +128,6 @@ function SearchTab({ days }: { days: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat label="Total Clicks" value={loading ? '…' : s.totalClicks.toLocaleString()} />
         <Stat label="Impressions" value={loading ? '…' : s.totalImpressions.toLocaleString()} />
@@ -136,7 +135,6 @@ function SearchTab({ days }: { days: string }) {
         <Stat label="Avg CTR" value={loading ? '…' : s.avgCtr + '%'} sub="Click-through rate" />
       </div>
 
-      {/* Position distribution */}
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Top 10 (Green)', count: green.length, color: '#22C55E', desc: 'Ranking well' },
@@ -151,7 +149,6 @@ function SearchTab({ days }: { days: string }) {
         ))}
       </div>
 
-      {/* Click trend chart */}
       {sc.trends && sc.trends.length > 0 && (
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-5">
           <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-3">Click Trend</div>
@@ -179,7 +176,6 @@ function SearchTab({ days }: { days: string }) {
         </div>
       )}
 
-      {/* Keyword table */}
       <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">Top Keywords</div>
@@ -215,7 +211,6 @@ function SearchTab({ days }: { days: string }) {
         </div>
       </div>
 
-      {/* Poor ranking pages */}
       {red.length > 0 && (
         <div className="bg-[#EF4444]/5 border border-[#EF4444]/20 rounded-xl p-5">
           <div className="text-[11px] font-semibold text-[#EF4444] uppercase tracking-wide mb-3">
@@ -234,6 +229,103 @@ function SearchTab({ days }: { days: string }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function SocialTab() {
+  return (
+    <div className="space-y-6">
+      {/* Buffer status */}
+      <div className="bg-[#1C1C1C] border border-[#14B8A6]/20 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+          <div className="text-[13px] font-semibold text-[#F1F5F9]">Buffer Connected</div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E]">Live</span>
+        </div>
+        <div className="text-[12px] text-[#94A3B8] mb-3">
+          Scheduled posts published via Buffer API. Post performance tracking requires Instagram Business API.
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-[#161616] border border-white/[0.05] rounded-lg p-4">
+            <div className="text-[10px] text-[#64748B] uppercase tracking-wide mb-1">Scheduling</div>
+            <div className="text-[18px] font-bold text-[#22C55E]">Active</div>
+            <div className="text-[11px] text-[#475569] mt-0.5">Posts queued to Buffer from Content Studio</div>
+          </div>
+          <div className="bg-[#161616] border border-white/[0.05] rounded-lg p-4">
+            <div className="text-[10px] text-[#64748B] uppercase tracking-wide mb-1">Analytics</div>
+            <div className="text-[18px] font-bold text-[#F59E0B]">Pending</div>
+            <div className="text-[11px] text-[#475569] mt-0.5">Requires Instagram Business API</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Instagram API setup */}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-[#F59E0B]" />
+          <div className="text-[13px] font-semibold text-[#F1F5F9]">Instagram Analytics — Setup Required</div>
+        </div>
+        <div className="text-[12px] text-[#94A3B8] mb-4">
+          Connect Instagram Business API to unlock: followers, reach, engagement rate, top posts, best posting times, hashtag performance.
+        </div>
+        <ol className="space-y-3 text-[12px] text-[#94A3B8]">
+          <li className="flex gap-3">
+            <span className="text-[#14B8A6] font-bold shrink-0">1.</span>
+            <span>Convert Instagram to <strong className="text-[#F1F5F9]">Business or Creator account</strong> — Settings → Account → Switch to Professional</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#14B8A6] font-bold shrink-0">2.</span>
+            <span>Create <strong className="text-[#F1F5F9]">Facebook Developer App</strong> at developers.facebook.com — add Instagram Basic Display product</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#14B8A6] font-bold shrink-0">3.</span>
+            <span>Generate <strong className="text-[#F1F5F9]">long-lived access token</strong> (60 days) — add as <code className="bg-white/[0.05] px-1 rounded">INSTAGRAM_ACCESS_TOKEN</code> in Vercel</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#14B8A6] font-bold shrink-0">4.</span>
+            <span>Add <strong className="text-[#F1F5F9]">irishpeptides Instagram account ID</strong> as <code className="bg-white/[0.05] px-1 rounded">INSTAGRAM_ACCOUNT_ID</code> in Vercel</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="text-[#14B8A6] font-bold shrink-0">5.</span>
+            <span>Social Performance agent already built — will auto-update this page once env vars are live</span>
+          </li>
+        </ol>
+        <div className="mt-4 text-[11px] text-[#475569]">
+          Status: BLOCKED — awaiting Facebook Developer app approval
+        </div>
+      </div>
+
+      {/* Metrics preview */}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
+        <div className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-4">
+          Metrics Available When Connected
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {[
+            { label: 'Followers', desc: 'Total + growth' },
+            { label: 'Reach', desc: 'Weekly unique accounts' },
+            { label: 'Engagement Rate', desc: 'Likes + comments / reach' },
+            { label: 'Top Posts', desc: 'Best performing content' },
+            { label: 'Best Times', desc: 'Optimal posting windows' },
+            { label: 'Hashtag Performance', desc: 'Reach per hashtag' },
+          ].map(m => (
+            <div key={m.label} className="bg-[#161616] border border-white/[0.05] rounded-lg p-3">
+              <div className="text-[12px] font-semibold text-[#475569] mb-0.5">{m.label}</div>
+              <div className="text-[10px] text-[#334155]">{m.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Hashtag research note */}
+      <div className="bg-[#A78BFA]/5 border border-[#A78BFA]/20 rounded-xl p-5">
+        <div className="text-[12px] font-semibold text-[#A78BFA] mb-2">Hashtag Research</div>
+        <div className="text-[12px] text-[#94A3B8]">
+          Trending fitness/nutrition/peptides hashtags for Ireland sourced via last30days agent.
+          Social Performance agent uses these to score each generated post before it enters the approval queue.
+        </div>
+      </div>
     </div>
   )
 }
@@ -275,10 +367,29 @@ export default function AnalyticsPage() {
     if (customStart && customEnd) fetchData('custom', customStart, customEnd)
   }
 
-  if (!data?.connected) {
+  if (!data?.connected && mainTab !== 'social') {
     return (
       <div className="p-8 max-w-5xl">
         <PageHeader title="Analytics" subtitle="GA4 live traffic — irishpeptides.ie" badge={{ label: loading ? 'Loading…' : 'Not connected', ok: false }} />
+
+        {/* Tab switcher even when disconnected */}
+        <div className="flex gap-2 mb-6">
+          {([
+            { key: 'ga4', label: 'GA4 Traffic' },
+            { key: 'search', label: 'Organic Search' },
+            { key: 'social', label: 'Social' },
+          ] as { key: MainTab; label: string }[]).map(t => (
+            <button key={t.key} onClick={() => setMainTab(t.key)}
+              className={`text-[12px] font-semibold px-4 py-2 rounded-lg border transition-all ${
+                mainTab === t.key
+                  ? 'bg-[#14B8A6]/10 border-[#14B8A6]/30 text-[#14B8A6]'
+                  : 'border-white/[0.07] text-[#64748B] hover:text-[#F1F5F9]'
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="text-[13px] text-[#64748B]">Fetching analytics data…</div>
         ) : (
@@ -299,14 +410,14 @@ export default function AnalyticsPage() {
     )
   }
 
-  const s = data.summary!
+  const s = data?.summary
 
   return (
     <div className="p-8 max-w-5xl">
       <PageHeader
         title="Analytics"
-        subtitle={`GA4 · ${data.propertyId} · ${data.dateRange?.startDate} to ${data.dateRange?.endDate}`}
-        badge={{ label: loading ? 'Refreshing…' : 'Live', ok: true }}
+        subtitle={mainTab === 'social' ? 'Social performance — Instagram & Buffer' : `GA4 · ${data?.propertyId} · ${data?.dateRange?.startDate} to ${data?.dateRange?.endDate}`}
+        badge={{ label: loading ? 'Refreshing…' : (mainTab === 'social' ? 'Partial' : 'Live'), ok: mainTab !== 'social' }}
       />
 
       {/* Main tab switcher */}
@@ -314,6 +425,7 @@ export default function AnalyticsPage() {
         {([
           { key: 'ga4', label: 'GA4 Traffic' },
           { key: 'search', label: 'Organic Search' },
+          { key: 'social', label: 'Social' },
         ] as { key: MainTab; label: string }[]).map(t => (
           <button key={t.key} onClick={() => setMainTab(t.key)}
             className={`text-[12px] font-semibold px-4 py-2 rounded-lg border transition-all ${
@@ -326,6 +438,7 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
+      {mainTab === 'social' && <SocialTab />}
       {mainTab === 'search' && <SearchTab days={quickRange === 'custom' ? '28' : quickRange} />}
 
       {mainTab === 'ga4' && <>
@@ -363,8 +476,9 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Summary stats */}
+      {s && <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Stat label="Sessions" value={loading ? '…' : fmt(s.sessions)} sub={data.dateRange?.startDate + ' – ' + data.dateRange?.endDate} />
+        <Stat label="Sessions" value={loading ? '…' : fmt(s.sessions)} sub={data?.dateRange?.startDate + ' – ' + data?.dateRange?.endDate} />
         <Stat label="Unique Visitors" value={loading ? '…' : fmt(s.users)} sub="Total users" />
         <Stat label="New Users" value={loading ? '…' : fmt(s.newUsers)} sub="First visit" />
         <Stat label="Page Views" value={loading ? '…' : fmt(s.pageviews)} />
@@ -374,9 +488,10 @@ export default function AnalyticsPage() {
         <Stat label="Avg Session" value={loading ? '…' : fmtDur(s.avgSessionDuration)} sub="Duration" />
         <Stat label="Pages / Session" value={loading ? '…' : s.pagesPerSession} sub="Depth" />
       </div>
+      </>}
 
       {/* Sessions over time line chart */}
-      {data.byDate && data.byDate.length > 0 && (
+      {data?.byDate && data.byDate.length > 0 && (
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-5 mb-6">
           <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-1">Sessions Over Time</div>
           <div className="text-[11px] text-[#475569] mb-3">{data.dateRange?.startDate} – {data.dateRange?.endDate}</div>
@@ -389,7 +504,7 @@ export default function AnalyticsPage() {
       )}
 
       {/* Top pages table */}
-      {data.topPages && data.topPages.length > 0 && (
+      {data?.topPages && data.topPages.length > 0 && (
         <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6">
           <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-4">Top Pages</div>
           <div className="overflow-x-auto">
