@@ -70,7 +70,6 @@ const AI_SYSTEM_COLORS: Record<string, string> = {
 const REGEN_MODEL_COLORS: Record<string, string> = {
   gemini:   'bg-[#4285F4]/20 border-[#4285F4]/50 text-[#4285F4]',
   deepseek: 'bg-[#06B6D4]/20 border-[#06B6D4]/50 text-[#06B6D4]',
-  claude:   'bg-[#D97706]/20 border-[#D97706]/50 text-[#D97706]',
 }
 
 function detectType(o: Outcome): string {
@@ -485,7 +484,7 @@ export default function ContentStudioPage() {
                           <div className="bg-[#161616] border border-white/[0.07] rounded-lg p-3">
                             <div className="text-[11px] font-semibold text-[#94A3B8] mb-2">Regenerate with AI</div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              {(['gemini', 'deepseek', 'claude'] as const).map(m => (
+                              {(['gemini', 'deepseek'] as const).map(m => (
                                 <button
                                   key={m}
                                   onClick={() => setRegenModel(prev => ({ ...prev, [o.id]: m }))}
@@ -622,3 +621,4 @@ export default function ContentStudioPage() {
     </div>
   )
 }
+
