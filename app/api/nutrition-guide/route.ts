@@ -52,7 +52,10 @@ User details:
 
 Rules:
 - DIETARY RESTRICTION IS MANDATORY: preference is "${preference}". If Vegetarian — ZERO meat, ZERO fish, ZERO poultry in ANY meal. If Vegan — ZERO animal products. If Omnivore — include meat and fish freely. NEVER put chicken or tuna in a Vegetarian plan under any circumstances.
-- Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats, Avonmore Semi-Skimmed Milk, Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta, Tesco Finest Salmon Fillets (Omnivore only), Fage 0% Greek Yogurt, Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter, Avonmore Protein Milk. Vegetarian protein sources: eggs, Greek yogurt, cottage cheese, lentils, chickpeas, tofu, tempeh, edamame, beans, cheese, quorn.
+- SUPERMARKET RULE: ONLY use Tesco, Lidl, and Aldi. NEVER mention SuperValu, Dunnes Stores, or any other retailer.
+- NO SELF-CORRECTION: Generate each day correctly on the first attempt. NEVER write "*Self-correction:*", "*Revised Day X:*", or any meta-commentary about fixing previous output. If a day needs more calories, add them silently — do not explain or annotate.
+- Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats (Tesco/Lidl/Aldi), Avonmore Semi-Skimmed Milk (Tesco), Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta (Tesco), Tesco Finest Salmon Fillets (Omnivore only), Fage 0% Greek Yogurt (Tesco), Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter (Tesco/Lidl), Avonmore Protein Milk (Tesco). Vegetarian protein sources: eggs, Greek yogurt, cottage cheese, lentils, chickpeas, tofu, tempeh, edamame, beans, cheese, quorn.
+- CALORIE CONSISTENCY: Every day must hit within 5% of the target ${kcal}. Check your work. If a day is short, add a snack or increase portions — do not note this in the output.
 - High protein emphasis — aim 1.6-2g protein per kg bodyweight
 - List every ingredient with exact weight/quantity on its own bullet point
 - Show kcal and protein per meal in format: "Approx. X kcal, Xg protein"
@@ -124,48 +127,62 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
 
   <div style="background:#111827;border-radius:12px;padding:20px;margin-bottom:24px;">
     <p style="color:#E2E8F0;font-weight:700;margin:0 0 4px;font-size:14px;">&#x1F6D2; Shop the Plan Staples</p>
-    <p style="color:#64748B;font-size:12px;margin:0 0 16px;">Click to search directly at Tesco</p>
+    <p style="color:#64748B;font-size:12px;margin:0 0 16px;">Find at Tesco, Lidl &amp; Aldi</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #1E293B;">
+        <td style="padding:4px 4px 8px 0;width:34%;font-size:11px;font-weight:700;color:#64748B;">ITEM</td>
+        <td style="padding:4px 4px 8px;width:22%;font-size:11px;font-weight:700;color:#00539f;">TESCO</td>
+        <td style="padding:4px 4px 8px;width:22%;font-size:11px;font-weight:700;color:#0050AA;">LIDL</td>
+        <td style="padding:4px 0 8px 4px;width:22%;font-size:11px;font-weight:700;color:#002A5C;">ALDI</td>
+      </tr>
       ${preference !== "Vegetarian" && preference !== "Vegan" ? `
       <tr>
-        <td style="padding:4px 6px 4px 0;width:50%;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Chicken Breast</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=chicken+breast" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
-        <td style="padding:4px 0 4px 6px;width:50%;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Tuna (canned)</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=tuna+in+water" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
+        <td style="padding:8px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Chicken Breast</td>
+        <td style="padding:8px 4px 4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=chicken+breast" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:8px 4px 4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=chicken+breast" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:8px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=chicken+breast" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Tuna (canned)</td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=tuna+in+water" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=tuna" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=tuna" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
       </tr>` : ""}
       <tr>
-        <td style="padding:8px 6px 4px 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Free Range Eggs</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=free+range+eggs" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
-        <td style="padding:8px 0 4px 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Greek Yogurt</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=greek+yogurt" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
+        <td style="padding:8px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Free Range Eggs</td>
+        <td style="padding:8px 4px 4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=free+range+eggs" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:8px 4px 4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=free+range+eggs" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:8px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=eggs" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
       </tr>
       <tr>
-        <td style="padding:8px 6px 4px 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Porridge Oats</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=porridge+oats" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
-        <td style="padding:8px 0 4px 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Sweet Potato</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=sweet+potato" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
+        <td style="padding:4px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Greek Yogurt</td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=greek+yogurt" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=greek+yogurt" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=greek+yogurt" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
       </tr>
       <tr>
-        <td style="padding:8px 6px 0 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Brown Rice</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=brown+rice" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
-        <td style="padding:8px 0 0 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Cottage Cheese</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=cottage+cheese" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
-        </td>
+        <td style="padding:4px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Porridge Oats</td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=porridge+oats" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=oats" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=oats" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Sweet Potato</td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=sweet+potato" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=sweet+potato" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=sweet+potato" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 4px 4px 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Cottage Cheese</td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=cottage+cheese" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=cottage+cheese" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 4px 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=cottage+cheese" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 4px 0 0;font-size:12px;font-weight:700;color:#94A3B8;vertical-align:middle;">Brown Rice</td>
+        <td style="padding:4px 4px 0;vertical-align:middle;"><a href="https://www.tesco.ie/groceries/en-GB/search?query=brown+rice" style="display:inline-block;background:#00539f;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 4px 0;vertical-align:middle;"><a href="https://www.lidl.ie/search?query=brown+rice" style="display:inline-block;background:#0050AA;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
+        <td style="padding:4px 0 0 4px;vertical-align:middle;"><a href="https://www.aldi.ie/search?query=rice" style="display:inline-block;background:#002A5C;color:#fff;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Shop</a></td>
       </tr>
     </table>
   </div>
