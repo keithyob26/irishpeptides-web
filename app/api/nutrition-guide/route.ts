@@ -55,7 +55,7 @@ Rules:
 - SUPERMARKET RULE: ONLY use Tesco, Lidl, and Aldi. NEVER mention SuperValu, Dunnes Stores, or any other retailer.
 - NO SELF-CORRECTION: Generate each day correctly on the first attempt. NEVER write "*Self-correction:*", "*Revised Day X:*", or any meta-commentary about fixing previous output. If a day needs more calories, add them silently — do not explain or annotate.
 - Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats (Tesco/Lidl/Aldi), Avonmore Semi-Skimmed Milk (Tesco), Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta (Tesco), Tesco Finest Salmon Fillets (Omnivore only), Fage 0% Greek Yogurt (Tesco), Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter (Tesco/Lidl), Avonmore Protein Milk (Tesco). Vegetarian protein sources: eggs, Greek yogurt, cottage cheese, lentils, chickpeas, tofu, tempeh, edamame, beans, cheese, quorn.
-- CALORIE CONSISTENCY: Every day must hit within 5% of the target ${kcal}. Check your work. If a day is short, add a snack or increase portions — do not note this in the output.
+- CALORIE TARGET IS MANDATORY: The user entered ${calories} kcal/day. Every single day MUST total between ${calories ? Math.round(calories * 0.95) : 'target - 5%'} and ${calories ? Math.round(calories * 1.05) : 'target + 5%'} kcal. Build each day to hit this. Do not guess — add up your meals before writing the day total. If a meal is short, increase portions or add a snack BEFORE writing the day total line.
 - High protein emphasis — aim 1.6-2g protein per kg bodyweight
 - List every ingredient with exact weight/quantity on its own bullet point
 - Show kcal and protein per meal in format: "Approx. X kcal, Xg protein"
@@ -83,6 +83,24 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
       raw = raw.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
       mealPlan = raw;
       if (!mealPlan) console.error("[nutrition-guide] Gemini returned empty:", JSON.stringify(gd).slice(0, 300));
+
+      // Validate day totals — check each "Day X Total: Approx. X kcal" is within 10% of target
+      if (mealPlan && calories) {
+        const totalMatches = [...mealPlan.matchAll(/Day\s+\d+\s+Total[^<]*?(\d{3,4})\s*kcal/gi)];
+        const offDays: string[] = [];
+        const low = Math.round(calories * 0.9);
+        const high = Math.round(calories * 1.1);
+        for (const m of totalMatches) {
+          const dayKcal = parseInt(m[1]);
+          if (dayKcal < low || dayKcal > high) {
+            offDays.push(`${m[0].slice(0, 20).trim()} (${dayKcal} kcal — target ${calories})`);
+          }
+        }
+        if (offDays.length > 0) {
+          console.warn("[nutrition-guide] Calorie mismatch days:", offDays);
+          mealPlan += `\n<p style="color:#F59E0B;font-size:12px;margin-top:16px;">&#x26A0; Note: Some days may vary slightly from your ${calories} kcal target. Adjust portions to match your goal.</p>`;
+        }
+      }
     } catch (e) {
       console.error("[nutrition-guide] Gemini error:", e);
       mealPlan = "";
