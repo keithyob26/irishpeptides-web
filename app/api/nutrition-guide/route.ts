@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 
 const GEMINI_KEY  = process.env.GEMINI_API_KEY  || "";
 const RESEND_KEY  = process.env.RESEND_API_KEY   || "";
+const NOTION_KEY  = process.env.NOTION_API_KEY   || "";
 const AUDIENCE_ID = process.env.RESEND_AUDIENCE_ID || "fe3ebf86-af78-485c-bfe8-96151603d89e";
 const FROM        = "Irish Peptides <plans@irishpeptides.ie>";
+const NOTION_LEADS_PAGE = "37da0eb7-e3ea-819e-af5b-e76db92a7c8c";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -200,13 +202,45 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
         }),
       });
 
-      // NOTE: audience contact addition removed — Resend automation was sending
-      // a broken "Your Download" template email. Re-enable after fixing in Resend dashboard.
+      // Add to Resend audience for future newsletters
+      if (AUDIENCE_ID) {
+        await fetch(`https://api.resend.com/audiences/${AUDIENCE_ID}/contacts`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, first_name: displayName !== "there" ? displayName : undefined, unsubscribed: false }),
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error("Resend error:", e);
       return NextResponse.json({ error: "Email send failed" }, { status: 500, headers: cors });
     }
   }
 
-  return NextResponse.json({ ok: true }, { headers: cors });
+  // ── Log lead to Notion ───────────────────────────────────────────────────
+  if (NOTION_KEY) {
+    try {
+      await fetch("https://api.notion.com/v1/pages", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${NOTION_KEY}`,
+          "Content-Type": "application/json",
+          "Notion-Version": "2022-06-28",
+        },
+        body: JSON.stringify({
+          parent: { page_id: NOTION_LEADS_PAGE },
+          properties: {
+            title: { title: [{ text: { content: `📧 Nutrition Lead: ${email}` } }] },
+          },
+          children: [{
+            object: "block", type: "paragraph",
+            paragraph: { rich_text: [{ text: { content:
+              `Name: ${name || "N/A"} | Email: ${email} | Goal: ${goal} | Calories: ${kcal} | Diet: ${preference} | Training: ${days}`
+            } }] },
+          }],
+        }),
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  return NextResponse.json({ ok: true, plan: mealPlan }, { headers: cors });
 }
