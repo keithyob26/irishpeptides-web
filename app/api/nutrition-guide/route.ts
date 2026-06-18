@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const GEMINI_KEY  = process.env.GEMINI_API_KEY  || "";
 const RESEND_KEY  = process.env.RESEND_API_KEY   || "";
 const AUDIENCE_ID = process.env.RESEND_AUDIENCE_ID || "fe3ebf86-af78-485c-bfe8-96151603d89e";
-const FROM        = "Irish Peptides <onboarding@resend.dev>";
+const FROM        = "Irish Peptides <plans@irishpeptides.ie>";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -111,6 +111,61 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names. Readable in
 
   <div style="background:#111827;border-radius:12px;padding:24px;color:#CBD5E1;font-size:14px;line-height:1.7;margin-bottom:24px;">
     ${mealPlan}
+  </div>
+
+  <div style="background:#111827;border-radius:12px;padding:20px;margin-bottom:24px;">
+    <p style="color:#E2E8F0;font-weight:700;margin:0 0 4px;font-size:14px;">🛒 Shop the Plan Staples</p>
+    <p style="color:#64748B;font-size:12px;margin:0 0 16px;">Click to search directly at Tesco or SuperValu</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr>
+        <td style="padding:4px 6px 4px 0;width:50%;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍗 Chicken Breast</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=chicken+breast" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=chicken+breast" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+        <td style="padding:4px 0 4px 6px;width:50%;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🥚 Free Range Eggs</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=free+range+eggs" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=free+range+eggs" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:8px 6px 4px 0;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🥣 Porridge Oats</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=porridge+oats" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=porridge+oats" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+        <td style="padding:8px 0 4px 6px;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🫙 Greek Yogurt</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=greek+yogurt" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=greek+yogurt" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:8px 6px 4px 0;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🐟 Tuna (canned)</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=tuna+in+water" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=tuna" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+        <td style="padding:8px 0 4px 6px;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍠 Sweet Potato</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=sweet+potato" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=sweet+potato" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:8px 6px 0 0;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍚 Brown Rice</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=brown+rice" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=brown+rice" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+        <td style="padding:8px 0 0 6px;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🧀 Cottage Cheese</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=cottage+cheese" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
+          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=cottage+cheese" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <div style="background:#0D1F1E;border:1px solid #14B8A630;border-radius:10px;padding:20px;margin-bottom:24px;">
