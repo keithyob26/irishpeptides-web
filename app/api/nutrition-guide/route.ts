@@ -49,17 +49,18 @@ User details:
 - Primary goal: ${goal}
 
 Rules:
-- Use realistic Irish supermarket foods (Lidl, Aldi, Tesco, Dunnes)
-- High protein emphasis (aim 1.6-2g protein per kg bodyweight)
-- Simple meals that take under 30 minutes
+- Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats, Avonmore Semi-Skimmed Milk, Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta, Dunnes Stores Simply Better Lean Beef Mince, Tesco Finest Salmon Fillets, Fage 0% Greek Yogurt, Lidl Meadow Fresh Cooked Chicken Fillets, Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter, Avonmore Protein Milk.
+- High protein emphasis — aim 1.6-2g protein per kg bodyweight
+- List every ingredient with exact weight/quantity on its own bullet point
+- Show kcal and protein per meal in format: "Approx. X kcal, Xg protein"
+- Show day total in format: "Day X Total: Approx. X kcal, Xg protein"
+- Add one "Practical Tip:" per day (not "Tip of the Day" — just "Practical Tip:")
+- Simple meals under 30 minutes
 - Include breakfast, lunch, dinner, one snack per day
-- Show approximate calories and protein for each day total
-- Irish-friendly portions and measurements
-- Add one practical tip per day
-- End with a note: "This plan is for educational purposes. Adjust based on your preferences and consult a dietitian for medical advice."
+- End with: "This plan is for educational purposes. Adjust based on your preferences and consult a dietitian for medical advice."
 
 CRITICAL: Output ONLY raw HTML — no markdown, no \`\`\`html fences, no explanation text. Start directly with <h3>Day 1</h3>.
-Format: <h3> day headings, <ul> meal lists, <strong> for meal names. Readable in an email.`;
+Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kcal/protein lines. Readable in an email.`;
 
     try {
       const gr = await fetch(
