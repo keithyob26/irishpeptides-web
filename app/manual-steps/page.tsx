@@ -128,11 +128,11 @@ const ALL_STEPS: Step[] = [
   {
     id: "anthropic_key",
     priority: "low",
-    title: "ANTHROPIC_API_KEY — When Available",
-    text: "Not currently available. AI Chat uses Gemini 2.5 Flash fallback — fully working. Add if/when Anthropic key obtained.",
+    title: "ANTHROPIC_API_KEY — Optional Upgrade",
+    text: "Claude AI Chat works now via CLI workaround (local) + Gemini fallback (Vercel). Add key only if you want Claude on the live Vercel dashboard instead of Gemini.",
     link: "https://console.anthropic.com/settings/keys",
     link_label: "Anthropic Console",
-    blocks_what: "Nothing currently — Gemini fallback is live and working",
+    blocks_what: "Nothing — Claude works locally via CLI, Gemini works on Vercel",
     steps: [
       "Go to console.anthropic.com → Settings → API Keys",
       "Create new key → name: IrishPeptides",
