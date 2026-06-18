@@ -51,7 +51,8 @@ User details:
 - Primary goal: ${goal}
 
 Rules:
-- Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats, Avonmore Semi-Skimmed Milk, Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta, Dunnes Stores Simply Better Lean Beef Mince, Tesco Finest Salmon Fillets, Fage 0% Greek Yogurt, Lidl Meadow Fresh Cooked Chicken Fillets, Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter, Avonmore Protein Milk.
+- DIETARY RESTRICTION IS MANDATORY: preference is "${preference}". If Vegetarian — ZERO meat, ZERO fish, ZERO poultry in ANY meal. If Vegan — ZERO animal products. If Omnivore — include meat and fish freely. NEVER put chicken or tuna in a Vegetarian plan under any circumstances.
+- Name SPECIFIC Irish supermarket brands in brackets after each ingredient. Examples: Flahavan's Progress Oats, Avonmore Semi-Skimmed Milk, Lidl Milbona 0% Greek Yogurt, Aldi Kavanagh's Rolled Oats, Pat the Baker Wholemeal Pitta, Tesco Finest Salmon Fillets (Omnivore only), Fage 0% Greek Yogurt, Aldi The Deli Reduced Fat Hummus, Lidl frozen berry mix, Kerry Gold butter, Avonmore Protein Milk. Vegetarian protein sources: eggs, Greek yogurt, cottage cheese, lentils, chickpeas, tofu, tempeh, edamame, beans, cheese, quorn.
 - High protein emphasis — aim 1.6-2g protein per kg bodyweight
 - List every ingredient with exact weight/quantity on its own bullet point
 - Show kcal and protein per meal in format: "Approx. X kcal, Xg protein"
@@ -87,8 +88,13 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
 
   // Fallback if Gemini fails
   if (!mealPlan) {
-    mealPlan = `<p>Your personalised plan for <strong>${goal}</strong> on <strong>${kcal}</strong> is being prepared.
-    Focus on: high protein (chicken, eggs, Greek yogurt, cottage cheese), complex carbs (oats, rice, sweet potato),
+    const proteinSources = preference === "Vegetarian"
+      ? "eggs, Greek yogurt, cottage cheese, lentils, chickpeas"
+      : preference === "Vegan"
+      ? "tofu, tempeh, edamame, lentils, chickpeas, beans"
+      : "chicken, eggs, Greek yogurt, tuna, cottage cheese";
+    mealPlan = `<p>Your personalised ${preference} plan for <strong>${goal}</strong> on <strong>${kcal}</strong> is being prepared.
+    Focus on: high protein (${proteinSources}), complex carbs (oats, rice, sweet potato),
     and plenty of vegetables from your local Lidl or Aldi. Training ${days}.</p>
     <p>For a detailed breakdown, reply to this email and Keith will send you a custom plan within 24 hours.</p>`;
   }
@@ -117,55 +123,48 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
   </div>
 
   <div style="background:#111827;border-radius:12px;padding:20px;margin-bottom:24px;">
-    <p style="color:#E2E8F0;font-weight:700;margin:0 0 4px;font-size:14px;">🛒 Shop the Plan Staples</p>
-    <p style="color:#64748B;font-size:12px;margin:0 0 16px;">Click to search directly at Tesco or SuperValu</p>
+    <p style="color:#E2E8F0;font-weight:700;margin:0 0 4px;font-size:14px;">&#x1F6D2; Shop the Plan Staples</p>
+    <p style="color:#64748B;font-size:12px;margin:0 0 16px;">Click to search directly at Tesco</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${preference !== "Vegetarian" && preference !== "Vegan" ? `
       <tr>
         <td style="padding:4px 6px 4px 0;width:50%;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍗 Chicken Breast</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=chicken+breast" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=chicken+breast" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Chicken Breast</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=chicken+breast" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
         <td style="padding:4px 0 4px 6px;width:50%;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🥚 Free Range Eggs</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=free+range+eggs" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=free+range+eggs" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Tuna (canned)</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=tuna+in+water" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
+        </td>
+      </tr>` : ""}
+      <tr>
+        <td style="padding:8px 6px 4px 0;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Free Range Eggs</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=free+range+eggs" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
+        </td>
+        <td style="padding:8px 0 4px 6px;vertical-align:top;">
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Greek Yogurt</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=greek+yogurt" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
       </tr>
       <tr>
         <td style="padding:8px 6px 4px 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🥣 Porridge Oats</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=porridge+oats" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=porridge+oats" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Porridge Oats</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=porridge+oats" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
         <td style="padding:8px 0 4px 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🫙 Greek Yogurt</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=greek+yogurt" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=greek+yogurt" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:8px 6px 4px 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🐟 Tuna (canned)</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=tuna+in+water" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=tuna" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
-        </td>
-        <td style="padding:8px 0 4px 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍠 Sweet Potato</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=sweet+potato" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=sweet+potato" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Sweet Potato</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=sweet+potato" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
       </tr>
       <tr>
         <td style="padding:8px 6px 0 0;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🍚 Brown Rice</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=brown+rice" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=brown+rice" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Brown Rice</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=brown+rice" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
         <td style="padding:8px 0 0 6px;vertical-align:top;">
-          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">🧀 Cottage Cheese</div>
-          <a href="https://www.tesco.ie/groceries/en-GB/search?query=cottage+cheese" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;margin-right:4px;">Tesco</a>
-          <a href="https://shop.supervalu.ie/sm/delivery/rsid/5550/page/search?q=cottage+cheese" style="display:inline-block;background:#e31837;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">SuperValu</a>
+          <div style="font-size:12px;font-weight:700;color:#94A3B8;margin-bottom:8px;">Cottage Cheese</div>
+          <a href="https://www.tesco.ie/groceries/en-GB/search?query=cottage+cheese" style="display:inline-block;background:#00539f;color:#fff;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;text-decoration:none;">Tesco</a>
         </td>
       </tr>
     </table>
