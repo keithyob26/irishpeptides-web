@@ -225,7 +225,7 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
   // ── Send email via Resend ────────────────────────────────────────────────
   if (RESEND_KEY) {
     try {
-      await fetch("https://api.resend.com/emails", {
+      const resendRes = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -235,6 +235,11 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
           html,
         }),
       });
+      if (!resendRes.ok) {
+        const errBody = await resendRes.text().catch(() => "");
+        console.error("[nutrition-guide] Resend error:", resendRes.status, errBody);
+        return NextResponse.json({ error: "Email send failed", detail: errBody }, { status: 500, headers: cors });
+      }
 
       // Add to Resend audience for future newsletters
       if (AUDIENCE_ID) {
