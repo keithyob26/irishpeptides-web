@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { spawnSync } from 'child_process'
 import fs from 'fs'
 
+// ── Cost controls ─────────────────────────────────────────────────────────────
+const MAX_INPUT_CHARS = 1500
+const MAX_OUTPUT_TOKENS = 600
+
+// Simple in-memory rate limit: max 15 requests per minute per IP
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const entry = rateLimitMap.get(ip)
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 })
+    return false
+  }
+  if (entry.count >= 15) return true
+  entry.count++
+  return false
+}
+
 export const runtime = 'nodejs'
 
 const CLAUDE_CMD = 'C:\\Users\\keith.obeirne\\AppData\\Roaming\\npm\\claude.cmd'
@@ -326,7 +344,7 @@ async function streamGemini(apiKey: string, systemCtx: string, contentParts: unk
       body: JSON.stringify({
         contents: [{ role: 'user', parts: geminiParts }],
         systemInstruction: { parts: [{ text: systemCtx }] },
-        generationConfig: { maxOutputTokens: 1024 },
+        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
       }),
       signal: AbortSignal.timeout(30000),
     }
@@ -385,7 +403,7 @@ async function streamDeepSeek(apiKey: string, systemCtx: string, message: string
       model: 'deepseek-chat',
       messages: [{ role: 'system', content: systemCtx }, { role: 'user', content: message }],
       stream: true,
-      max_tokens: 1024,
+      max_tokens: MAX_OUTPUT_TOKENS,
     }),
     signal: AbortSignal.timeout(30000),
   })
@@ -546,6 +564,11 @@ async function streamClaude(systemCtx: string, contentParts: unknown[]): Promise
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    if (isRateLimited(ip)) {
+      return NextResponse.json({ error: 'Too many requests — please wait a minute.' }, { status: 429 })
+    }
+
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
     const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
 
@@ -577,6 +600,9 @@ export async function POST(req: NextRequest) {
 
     if (!message?.trim() && contentParts.length === 0) {
       return NextResponse.json({ error: 'No message' }, { status: 400 })
+    }
+    if (message.length > MAX_INPUT_CHARS) {
+      return NextResponse.json({ error: `Message too long — max ${MAX_INPUT_CHARS} characters.` }, { status: 400 })
     }
 
     // Build live context based on intent detection

@@ -93,14 +93,28 @@ export default function CalendarPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/outcomes')
-      const data = await res.json()
-      const all: CalendarItem[] = (data.outcomes || []).filter(
-        (o: CalendarItem) => {
-          const t = detectType(o)
-          return ['blog', 'blog_post', 'social', 'instagram', 'tiktok', 'newsletter'].includes(t)
-        }
+      const [outcomesRes, calendarRes] = await Promise.allSettled([
+        fetch('/api/outcomes'),
+        fetch('/api/calendar'),
+      ])
+
+      const outcomesData = outcomesRes.status === 'fulfilled' ? await outcomesRes.value.json() : { outcomes: [] }
+      const calendarData = calendarRes.status === 'fulfilled' ? await calendarRes.value.json() : { items: [] }
+
+      const outcomeItems: CalendarItem[] = (outcomesData.outcomes || []).filter((o: CalendarItem) => {
+        const t = detectType(o)
+        return ['blog', 'blog_post', 'social', 'instagram', 'tiktok', 'newsletter'].includes(t)
+      })
+
+      // calendar.md planned items — dedupe against outcomes by date+type
+      const outcomeKeys = new Set(
+        outcomeItems.map(o => `${o.scheduled_date || o.created_at.split('T')[0]}|${detectType(o)}`)
       )
+      const plannedItems: CalendarItem[] = (calendarData.items || []).filter((o: CalendarItem) => {
+        return !outcomeKeys.has(`${o.scheduled_date}|${o.type}`)
+      })
+
+      const all = [...outcomeItems, ...plannedItems]
       all.sort((a, b) => new Date(getDate(b)).getTime() - new Date(getDate(a)).getTime())
       setItems(all)
     } catch (e) {
@@ -154,7 +168,7 @@ export default function CalendarPage() {
     <div className="p-8 max-w-5xl">
       <PageHeader
         title="Content Calendar"
-        subtitle="Live — synced from Content Studio · agent-generated"
+        subtitle="Live — synced from Content Studio + 8-week plan"
         badge={{ label: loading ? 'Loading…' : `${items.length} items`, ok: true }}
       />
 
