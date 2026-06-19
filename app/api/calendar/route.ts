@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const CALENDAR_RAW = 'https://raw.githubusercontent.com/keithyob26/irishpeptides-jarvis/master/content_drafts/calendar.md'
+const CALENDAR_API = 'https://api.github.com/repos/keithyob26/irishpeptides-jarvis/contents/content_drafts/calendar.md'
 
 const STATUS_MAP: Record<string, string> = {
   pending:     'pending_approval',
@@ -12,13 +12,22 @@ const STATUS_MAP: Record<string, string> = {
 
 export async function GET() {
   try {
-    const res = await fetch(CALENDAR_RAW, {
+    const token = process.env.JARVIS_GITHUB_TOKEN || process.env.GITHUB_TOKEN
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github+json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(CALENDAR_API, {
+      headers,
       next: { revalidate: 300 },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return NextResponse.json({ items: [] })
 
-    const md = await res.text()
+    const json = await res.json()
+    // GitHub Contents API returns base64-encoded content
+    const md = Buffer.from(json.content, 'base64').toString('utf-8')
     const items = []
 
     for (const line of md.split(/\r?\n/)) {
