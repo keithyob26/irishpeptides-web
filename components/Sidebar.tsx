@@ -28,6 +28,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "Business",
     items: [
       { href: "/analytics",  icon: "📊", label: "Analytics"       },
+      { href: "/seo",        icon: "🔎", label: "SEO & Rankings"  },
       { href: "/revenue",    icon: "💰", label: "Revenue"         },
       { href: "/subscribers",icon: "📬", label: "Subscribers"     },
       { href: "/social",     icon: "📣", label: "Social Hub"      },
