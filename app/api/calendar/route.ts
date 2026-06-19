@@ -21,7 +21,7 @@ export async function GET() {
     const md = await res.text()
     const items = []
 
-    for (const line of md.split('\n')) {
+    for (const line of md.split(/\r?\n/)) {
       const m = line.match(/^## (\d{4}-\d{2}-\d{2}) \| (\w+) \| (.+) \| (\w+)$/)
       if (!m) continue
       const [, date, type, title, statusRaw] = m
