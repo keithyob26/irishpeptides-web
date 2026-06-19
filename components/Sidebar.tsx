@@ -22,6 +22,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: "/optimizer",  icon: "🔍", label: "Optimizer"       },
       { href: "/competitor",          icon: "🎯", label: "Competitors"     },
       { href: "/market-intelligence", icon: "📈", label: "Market Intel"    },
+      { href: "/social-intel",        icon: "📡", label: "Social Intel"    },
     ],
   },
   {
