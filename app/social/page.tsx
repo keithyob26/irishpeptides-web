@@ -12,7 +12,6 @@ interface PostRecord {
   created_at: string
   published_at?: string
   type?: string
-  agent?: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -25,6 +24,28 @@ const STATUS_COLORS: Record<string, string> = {
 export default function SocialPage() {
   const [posts, setPosts] = useState<PostRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [socialQ, setSocialQ] = useState('')
+  const [socialAnswer, setSocialAnswer] = useState('')
+  const [socialLoading, setSocialLoading] = useState(false)
+
+  async function askSocial(q: string) {
+    if (!q.trim()) return
+    setSocialLoading(true)
+    setSocialAnswer('')
+    try {
+      const r = await fetch('/api/ask-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, context: 'social' }),
+      })
+      const d = await r.json()
+      setSocialAnswer(d.answer || d.error || 'No answer.')
+    } catch (e) {
+      setSocialAnswer('Error: ' + String(e))
+    } finally {
+      setSocialLoading(false)
+    }
+  }
 
   useEffect(() => {
     loadPosts()
@@ -202,6 +223,49 @@ export default function SocialPage() {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Ask Jarvis — social */}
+      <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 mt-6">
+        <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-1">Ask Jarvis</div>
+        <div className="text-[12px] text-[#475569] mb-4">Ask about your social performance in plain English</div>
+
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={socialQ}
+            onChange={e => setSocialQ(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && askSocial(socialQ)}
+            placeholder="e.g. Which TikTok did best this week? How is Instagram growing?"
+            className="flex-1 bg-[#161616] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[#F1F5F9] placeholder-[#334155] focus:outline-none focus:border-[#14B8A6]/50"
+          />
+          <button
+            onClick={() => askSocial(socialQ)}
+            disabled={socialLoading || !socialQ.trim()}
+            className="px-4 py-2 bg-[#14B8A6] text-[#0F172A] text-[12px] font-semibold rounded-lg disabled:opacity-40 hover:bg-[#0D9488] transition-colors"
+          >
+            {socialLoading ? '…' : 'Ask'}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          {['Which TikTok did best this week?', 'Are people using the IRISH keyword?', 'How many emails captured this week?', 'How is my Instagram growing?'].map(q => (
+            <button
+              key={q}
+              onClick={() => { setSocialQ(q); askSocial(q) }}
+              disabled={socialLoading}
+              className="text-[11px] text-[#64748B] border border-white/[0.07] rounded-full px-3 py-1 hover:border-[#14B8A6]/40 hover:text-[#94A3B8] transition-colors disabled:opacity-40"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {socialAnswer && (
+          <div className="bg-[#161616] border border-[#14B8A6]/20 rounded-lg p-4 text-[13px] text-[#94A3B8] leading-relaxed">
+            {socialAnswer}
           </div>
         )}
       </div>

@@ -3,6 +3,21 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '@/components/PageHeader'
 
+interface TokenSummary {
+  generated_at?: string
+  summary?: {
+    total_calls: number
+    total_tokens: number
+    total_cost_eur: number
+    today_tokens: number
+    today_cost_eur: number
+    cache_hit_rate_pct: number
+    monthly_projection_eur: number
+    daily_cap_tokens: number
+  }
+  by_model?: Record<string, { tokens_in: number; tokens_out: number; cost_eur: number; calls: number; cache_hit_rate_pct: number }>
+}
+
 type KeyStatus = { status: 'ok' | 'warn' | 'missing' | 'error'; note?: string }
 type Results = Record<string, KeyStatus>
 
@@ -44,6 +59,8 @@ export default function SettingsPage() {
   const [results, setResults] = useState<Results | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastChecked, setLastChecked] = useState<string>('')
+  const [tokenData, setTokenData] = useState<TokenSummary | null>(null)
+  const [tokenLoading, setTokenLoading] = useState(true)
 
   const check = async () => {
     setLoading(true)
@@ -59,7 +76,11 @@ export default function SettingsPage() {
     }
   }
 
-  useEffect(() => { check() }, [])
+  useEffect(() => {
+    check()
+    fetch('/api/token-usage', { cache: 'no-store' })
+      .then(r => r.json()).then(setTokenData).catch(() => {}).finally(() => setTokenLoading(false))
+  }, [])
 
   const keys = Object.keys(KEY_LABELS)
   const connected = results ? keys.filter(k => results[k]?.status === 'ok').length : 0
@@ -129,21 +150,79 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Token budget */}
+      {/* Token Usage Dashboard */}
       <div className="bg-[#1C1C1C] border border-white/[0.07] rounded-xl p-6 mb-6">
-        <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide mb-4">Token Budget</div>
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Daily Cap',  value: '15,000 tokens' },
-            { label: 'Used Today', value: '—' },
-            { label: 'Remaining',  value: '—' },
-          ].map(t => (
-            <div key={t.label} className="bg-[#161616] border border-white/[0.05] rounded-lg p-3 text-center">
-              <div className="text-[11px] text-[#64748B] mb-1">{t.label}</div>
-              <div className="text-base font-bold text-[#F1F5F9]">{t.value}</div>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[11px] font-semibold text-[#14B8A6] uppercase tracking-wide">Token Usage & Costs</div>
+          {tokenData?.generated_at && (
+            <span className="text-[11px] text-[#334155]">
+              Updated {new Date(tokenData.generated_at).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </div>
+
+        {tokenLoading ? (
+          <div className="py-6 text-center text-[13px] text-[#475569]">Loading token data…</div>
+        ) : !tokenData?.summary ? (
+          <div className="py-6 text-center text-[13px] text-[#475569]">No token usage data yet — runs after first agent call.</div>
+        ) : (
+          <>
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-4">
+              {[
+                { label: 'Today tokens', value: tokenData.summary.today_tokens.toLocaleString() },
+                { label: 'Today cost', value: `€${tokenData.summary.today_cost_eur.toFixed(4)}` },
+                { label: 'Monthly est.', value: `€${tokenData.summary.monthly_projection_eur.toFixed(2)}` },
+                { label: 'Cache hit rate', value: `${tokenData.summary.cache_hit_rate_pct}%` },
+              ].map(s => (
+                <div key={s.label} className="bg-[#161616] border border-white/[0.05] rounded-lg p-3 text-center">
+                  <div className="text-[11px] text-[#64748B] mb-1">{s.label}</div>
+                  <div className="text-base font-bold text-[#F1F5F9]">{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Daily cap progress */}
+            {(() => {
+              const pct = Math.min((tokenData.summary.today_tokens / tokenData.summary.daily_cap_tokens) * 100, 100)
+              const color = pct > 80 ? '#EF4444' : pct > 50 ? '#F59E0B' : '#14B8A6'
+              return (
+                <div className="mb-4">
+                  <div className="flex justify-between text-[11px] text-[#64748B] mb-1">
+                    <span>Daily cap usage</span>
+                    <span>{tokenData.summary.today_tokens.toLocaleString()} / {tokenData.summary.daily_cap_tokens.toLocaleString()} tokens</span>
+                  </div>
+                  <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Per-model breakdown */}
+            {tokenData.by_model && Object.keys(tokenData.by_model).length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[11px] text-[#475569] mb-2 uppercase tracking-wide">Per model</div>
+                {Object.entries(tokenData.by_model).map(([model, stats]) => (
+                  <div key={model} className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-[#F1F5F9] capitalize">{model}</span>
+                      <span className="text-[11px] text-[#475569]">{stats.calls} calls</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[13px] text-[#14B8A6]">€{stats.cost_eur.toFixed(4)}</span>
+                      <span className="text-[11px] text-[#475569] ml-2">{stats.cache_hit_rate_pct}% cached</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-3 text-[11px] text-[#334155]">
+              Total all time: {tokenData.summary.total_tokens.toLocaleString()} tokens · €{tokenData.summary.total_cost_eur.toFixed(4)}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Notifications */}
