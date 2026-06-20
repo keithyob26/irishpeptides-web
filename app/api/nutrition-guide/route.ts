@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 const GEMINI_KEY  = process.env.GEMINI_API_KEY  || "";
 const RESEND_KEY  = process.env.RESEND_API_KEY   || "";
 const NOTION_KEY  = process.env.NOTION_API_KEY   || "";
