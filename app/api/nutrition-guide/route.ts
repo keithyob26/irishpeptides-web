@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-const GEMINI_KEY  = process.env.GEMINI_API_KEY  || "";
+const GEMINI_KEY_FREE = process.env.GEMINI_API_KEY_FREE || "";
+const GEMINI_KEY_PAID = process.env.GEMINI_API_KEY  || "";
 const RESEND_KEY  = process.env.RESEND_API_KEY   || "";
 const NOTION_KEY  = process.env.NOTION_API_KEY   || "";
 const AUDIENCE_ID = process.env.RESEND_AUDIENCE_ID || "fe3ebf86-af78-485c-bfe8-96151603d89e";
@@ -41,8 +42,9 @@ export async function POST(req: Request) {
   const days  = training_days ? `${training_days} days/week` : "3 days/week";
 
   // ── Gemini meal plan generation ─────────────────────────────────────────
+  const activeGeminiKey = GEMINI_KEY_FREE || GEMINI_KEY_PAID;
   let mealPlan = "";
-  if (GEMINI_KEY) {
+  if (activeGeminiKey) {
     const prompt = `You are a nutrition coach specialising in Irish fitness culture. Generate a personalised 7-day meal plan.
 
 User details:
@@ -71,15 +73,19 @@ Rules:
 CRITICAL: Output ONLY raw HTML — no markdown, no \`\`\`html fences, no explanation text. Start directly with <h3>Day 1</h3>.
 Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kcal/protein lines. Readable in an email.`;
 
+    const geminiUrl = (key: string) =>
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+    const geminiBody = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 } } });
+
     try {
-      const gr = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 } } }),
-        }
-      );
+      let key = GEMINI_KEY_FREE || GEMINI_KEY_PAID;
+      let gr = await fetch(geminiUrl(key), { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody });
+      // Free key rate-limited → fall back to paid key
+      if ((gr.status === 429 || gr.status === 503) && GEMINI_KEY_FREE && GEMINI_KEY_PAID) {
+        console.warn("[nutrition-guide] Free key rate-limited, falling back to paid key");
+        key = GEMINI_KEY_PAID;
+        gr = await fetch(geminiUrl(key), { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody });
+      }
       const gd = await gr.json();
       let raw = gd?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       // Strip markdown code fences Gemini wraps around HTML
