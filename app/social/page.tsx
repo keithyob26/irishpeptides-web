@@ -12,6 +12,7 @@ interface PostRecord {
   created_at: string
   published_at?: string
   type?: string
+  agent?: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
