@@ -62,8 +62,8 @@ Rules:
 - CALORIE TARGET IS MANDATORY: The user entered ${calories} kcal/day. Every single day MUST total between ${calories ? Math.round(calories * 0.95) : 'target - 5%'} and ${calories ? Math.round(calories * 1.05) : 'target + 5%'} kcal. Build each day to hit this. Do not guess — add up your meals before writing the day total. If a meal is short, increase portions or add a snack BEFORE writing the day total line.
 - High protein emphasis — aim 1.6-2g protein per kg bodyweight
 - List every ingredient with exact weight/quantity on its own bullet point
-- Show kcal and protein per meal in format: "Approx. X kcal, Xg protein"
-- Show day total in format: "Day X Total: Approx. X kcal, Xg protein"
+- Show macros per meal in format: "Approx. X kcal | Xg protein | Xg carbs | Xg fat"
+- Show day total in format: "Day X Total: X kcal | Xg protein | Xg carbs | Xg fat" — sum every meal for that day before writing this line
 - Add one "Practical Tip:" per day (not "Tip of the Day" — just "Practical Tip:")
 - Simple meals under 30 minutes
 - Include breakfast, lunch, dinner, one snack per day
