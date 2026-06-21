@@ -43,11 +43,7 @@ interface BackupHealthData {
 const BROKEN_OVERRIDES: Record<string, { status: ServiceStatus; detail: string }> = {
   BUFFER_ACCESS_TOKEN: {
     status: 'warn',
-    detail: 'Disconnected — needs OAuth flow at buffer.com/developers/apps (manually blocked)',
-  },
-  MANYCHAT_API_KEY: {
-    status: 'warn',
-    detail: 'Disconnected — regenerate key at app.manychat.com/settings/api (manually blocked)',
+    detail: 'Token 401 — needs refresh at buffer.com/developers/apps',
   },
 }
 

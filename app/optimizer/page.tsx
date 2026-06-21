@@ -128,7 +128,9 @@ export default function OptimizerPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-[#475569]">Handled by: {g.who}</span>
-                    {!isApproved ? (
+                    {g.isAuto ? (
+                      <span className="text-[11px] text-[#F59E0B] font-semibold">⚡ Agent runs automatically</span>
+                    ) : !isApproved ? (
                       <div className="flex gap-1.5">
                         <button onClick={() => approve(g.keyword, g.keyword)} disabled={approving === g.keyword}
                           className="px-3 py-1 text-[11px] font-semibold rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/20 disabled:opacity-50 transition-all">
@@ -178,7 +180,9 @@ export default function OptimizerPage() {
                             {t.isAuto ? 'AUTO' : 'MANUAL'}
                           </span>
                         </div>
-                        {!isApproved ? (
+                        {t.isAuto ? (
+                          <span className="text-[11px] text-[#F59E0B] font-semibold">⚡ Agent runs automatically</span>
+                        ) : !isApproved ? (
                           <div className="flex gap-1.5">
                             <button onClick={() => approve(t.issue, t.issue)} disabled={approving === t.issue}
                               className="px-3 py-1 text-[11px] font-semibold rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/20 disabled:opacity-50 transition-all">
