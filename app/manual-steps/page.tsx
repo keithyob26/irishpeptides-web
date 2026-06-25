@@ -144,6 +144,28 @@ const ALL_STEPS: Step[] = [
   },
   // ── HIGH PRIORITY ─────────────────────────────────────────────────────────
   {
+    id: "gsc_indexing",
+    priority: "high",
+    title: "🔍 Google Search Console — Request Indexing (SEO Priority)",
+    text: "Site is live but most pages not yet indexed by Google. Request indexing manually in GSC to accelerate ranking. Also add GA4_SERVICE_ACCOUNT_JSON secret so Jarvis can track keyword rankings automatically.",
+    link: "https://search.google.com/search-console",
+    link_label: "Open Google Search Console",
+    blocks_what: "Google organic traffic — nobody finding irishpeptides.ie via search",
+    steps: [
+      "Open search.google.com/search-console → select irishpeptides.ie property",
+      "Click 'URL Inspection' (left sidebar)",
+      "Paste https://irishpeptides.ie/ → click 'Request Indexing'",
+      "Repeat for: https://irishpeptides.ie/blog (listing page)",
+      "Repeat for: https://irishpeptides.ie/blog/what-are-peptides-ireland",
+      "Repeat for: https://irishpeptides.ie/blog/bpc-157-research-guide-ireland",
+      "Repeat for: https://irishpeptides.ie/free-tools",
+      "Repeat for: https://irishpeptides.ie/macro-calculator",
+      "Sitemaps tab → confirm sitemap.xml is submitted (if not, paste https://irishpeptides.ie/sitemap.xml and click Submit)",
+      "Then add GA4_SERVICE_ACCOUNT_JSON to GitHub secrets (see ga4_json step below) — unlocks automated weekly ranking reports in Jarvis",
+    ],
+    done: false,
+  },
+  {
     id: "anthropic_key",
     priority: "low",
     title: "ANTHROPIC_API_KEY — Optional Upgrade",
