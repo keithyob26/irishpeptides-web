@@ -395,6 +395,64 @@ async function streamGemini(apiKey: string, systemCtx: string, contentParts: unk
   }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
 }
 
+async function streamGroq(apiKey: string, systemCtx: string, message: string): Promise<Response> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'system', content: systemCtx }, { role: 'user', content: message }],
+      stream: true,
+      max_tokens: MAX_OUTPUT_TOKENS,
+    }),
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!res.ok || !res.body) {
+    const err = await res.text()
+    const enc = makeEncoder()
+    return new Response(new ReadableStream({
+      start(c) {
+        c.enqueue(textChunk(enc, `Groq error: ${res.status} — ${err.slice(0, 200)}`))
+        c.enqueue(doneChunk(enc))
+        c.close()
+      }
+    }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
+  }
+
+  const enc = makeEncoder()
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+
+  return new Response(new ReadableStream({
+    async start(controller) {
+      let buf = ''
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const raw = line.slice(6).trim()
+            if (raw === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(raw)
+              const text = parsed?.choices?.[0]?.delta?.content
+              if (text) controller.enqueue(textChunk(enc, text))
+            } catch {}
+          }
+        }
+      } finally {
+        controller.enqueue(doneChunk(enc))
+        controller.close()
+      }
+    }
+  }), { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } })
+}
+
 async function streamDeepSeek(apiKey: string, systemCtx: string, message: string): Promise<Response> {
   const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
@@ -569,7 +627,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many requests — please wait a minute.' }, { status: 429 })
     }
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY_FREE || process.env.GEMINI_API_KEY || ''
+    const GROQ_API_KEY = process.env.GROQ_API_KEY || ''
     const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
 
     let message = ''
@@ -673,16 +732,22 @@ export async function POST(req: NextRequest) {
 
     let modelRes: Response
     if (model === 'deepseek') modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
+    else if (model === 'groq') modelRes = await streamGroq(GROQ_API_KEY, systemCtx, message)
+    else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
     else if (model === 'claude') {
       if (claudeAvailable) {
         modelRes = await streamClaude(systemCtx, contentParts)
-      } else {
-        // Claude CLI not available (cloud deploy) — fall back to Gemini silently
+      } else if (GEMINI_API_KEY) {
         modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
+      } else if (GROQ_API_KEY) {
+        modelRes = await streamGroq(GROQ_API_KEY, systemCtx, message)
+      } else {
+        modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
       }
     }
-    else if (model === 'ollama') modelRes = await streamOllama(systemCtx, message)
-    else modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
+    else if (GEMINI_API_KEY) modelRes = await streamGemini(GEMINI_API_KEY, systemCtx, contentParts)
+    else if (GROQ_API_KEY) modelRes = await streamGroq(GROQ_API_KEY, systemCtx, message)
+    else modelRes = await streamDeepSeek(DEEPSEEK_API_KEY, systemCtx, message)
 
     return wrapWithSources(modelRes)
   } catch (err) {
