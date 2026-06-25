@@ -478,6 +478,23 @@ const ALL_STEPS: Step[] = [
     done: false,
   },
   {
+    id: "headroom",
+    priority: "low",
+    title: "Headroom — 60-95% Token Reduction for Claude Code",
+    text: "Free open-source compressor. Shrinks tool outputs, file reads, bash results before they hit Claude. Blocked by Rust compiler install.",
+    link: "https://github.com/headroomlabs-ai/headroom",
+    link_label: "GitHub Repo",
+    blocks_what: "Nothing — saves ~60-95% on Claude Code token cost per session",
+    steps: [
+      "Install Rust: open terminal → run: winget install Rustlang.Rustup",
+      "Restart terminal after Rust installs",
+      "Run: py -3.14 -m pip install \"headroom-ai[all]\" (downloads ~600MB model first run)",
+      "Test: headroom wrap claude --memory --code-graph --1m",
+      "Use 'headroom wrap claude' instead of 'claude' for all future sessions",
+    ],
+    done: false,
+  },
+  {
     id: "firefly",
     priority: "low",
     title: "Firefly III — Finance Tracking",
