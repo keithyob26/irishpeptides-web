@@ -67,7 +67,7 @@ Rules:
 - Add one "Practical Tip:" per day (not "Tip of the Day" — just "Practical Tip:")
 - Simple meals under 30 minutes
 - Include breakfast, lunch, dinner, one snack per day
-- Include 2 ready-made meal suggestions in the week: on Day 3 at lunch and Day 6 at dinner, add a line: "Quick-prep option: [meal] from [Tesco/Aldi/Lidl] (~Xg protein, €X.XX)" using real options — Tesco Chicken & Rice (~74g protein, €4.50), Tesco Beef Bolognese (~69g protein, €4.50), Aldi Chicken & Roasted Veg Bowl (~78g protein, €3.99), Aldi Beef Chilli & Rice (~75g protein, €3.99). Skip for Vegan/Vegetarian unless it's a plant-based option.
+- Include 2 ready-made meal suggestions in the week: on Day 3 at lunch and Day 6 at dinner, add a line: "Quick-prep option: [meal] from [Tesco/Aldi/Lidl] (~Xg protein | Xg carbs | Xg fat | ~Xkcal, €X.XX)" using ACCURATE per-pack macros — Tesco High Protein Chicken & Rice (~35g protein | 52g carbs | 6g fat | ~410kcal, €4.50), Tesco Beef Bolognese (~28g protein | 48g carbs | 10g fat | ~400kcal, €4.50), Aldi Chicken & Roasted Veg Bowl (~30g protein | 45g carbs | 6g fat | ~360kcal, €3.99), Aldi Beef Chilli & Rice (~28g protein | 52g carbs | 6g fat | ~390kcal, €3.99). CRITICAL: these values are per full pack — do NOT inflate them. A ready meal with rice/pasta will have 25-40g protein, NOT 70g+. Skip for Vegan/Vegetarian unless it's a plant-based option.
 - End with: "This plan is for educational purposes. Adjust based on your preferences and consult a dietitian for medical advice."
 
 CRITICAL: Output ONLY raw HTML — no markdown, no \`\`\`html fences, no explanation text. Start directly with <h3>Day 1</h3>.
@@ -216,7 +216,7 @@ Format: <h3> day headings, <ul> meal lists, <strong> for meal names, <em> for kc
 
   <div style="background:#0D1F1E;border:1px solid #14B8A630;border-radius:10px;padding:20px;margin-bottom:16px;">
     <p style="color:#14B8A6;font-weight:700;margin:0 0 8px;font-size:14px;">🛒 Short on time? Ready-Made Meals</p>
-    <p style="color:#94A3B8;margin:0 0 12px;font-size:13px;">High-protein ready meals from Tesco, Aldi &amp; Lidl — 65–78g protein, under €5. No cooking required.</p>
+    <p style="color:#94A3B8;margin:0 0 12px;font-size:13px;">High-protein ready meals from Tesco, Aldi &amp; Lidl — 28–36g protein per pack, under €5. No cooking required.</p>
     <a href="https://irishpeptides.ie/nutrition-guide.html#ready-made-meals" style="display:inline-block;background:#14B8A6;color:#0A0F1E;font-weight:700;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;">
       View Ready-Made Options →
     </a>
