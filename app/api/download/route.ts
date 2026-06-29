@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY || "";
 const AUDIENCE_ID = process.env.RESEND_AUDIENCE_ID || "fe3ebf86-af78-485c-bfe8-96151603d89e";
-const TO_EMAIL    = "keith@irishpeptides.ie";
-const FROM_EMAIL  = "noreply@irishpeptides.ie";
 
 // ponytail: expand when PDFs are hosted — swap null for real URL
 const PDF_URLS: Record<string, string | null> = {
@@ -41,22 +39,6 @@ export async function POST(req: Request) {
         method: "POST",
         headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ email, unsubscribed: false }),
-      });
-    } catch { /* silent */ }
-  }
-
-  // Notify Keith of download request
-  if (RESEND_KEY) {
-    try {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from: FROM_EMAIL,
-          to: TO_EMAIL,
-          subject: `Free guide download request — ${pdf_name || pdf_id}`,
-          text: `${email} requested: ${pdf_name || pdf_id}\n\nAdd PDF to the download system when ready.`,
-        }),
       });
     } catch { /* silent */ }
   }
